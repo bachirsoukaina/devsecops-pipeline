@@ -25,30 +25,32 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
-  # ─────────────────────────────────────
-  # ÉTAPE 2 — SAST (SonarQube)
-  # ─────────────────────────────────────
-  sast:
-    name: 🔍 SAST Analysis (SonarQube)
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-      - name: Build with Maven
-        run: mvn clean package -DskipTests
-        working-directory: backend
-      - name: SonarQube Scan
-        uses: sonarsource/sonarqube-scan-action@master
-        with:
-          projectBaseDir: backend
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
-        continue-on-error: true
+    # ─────────────────────────────────────
+    # ÉTAPE 2 — SAST (SonarQube)
+    # ─────────────────────────────────────
+    sast:
+      name: 🔍 SAST Analysis (SonarQube)
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v4
+          with:
+            fetch-depth: 0
+        - name: Set up JDK 21
+          uses: actions/setup-java@v4
+          with:
+            java-version: '21'
+            distribution: 'temurin'
+        - name: Build and Analyze with SonarCloud
+          run: mvn clean verify sonar:sonar
+            -Dsonar.projectKey=bachirsoukaina_devsecops-pipeline
+            -Dsonar.organization=bachirsoukaina
+            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
+            -Dsonar.token=${{ secrets.SONAR_TOKEN }}
+            -DskipTests
+          working-directory: backend
+          env:
+            SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          continue-on-error: true
 
   # ─────────────────────────────────────
   # ÉTAPE 3 — SCA (OWASP Dependency Check)
