@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+
+  backend:
+    build: ./demo-app
+    container_name: spring-backend
+    ports:
+      - "8080:8080"
+    networks:
+      - devsecops-network
+
+  frontend:
+    build: ./demo-frontend
+    container_name: react-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    networks:
+      - devsecops-network
+
+networks:
+  devsecops-network:
+    driver: bridge
