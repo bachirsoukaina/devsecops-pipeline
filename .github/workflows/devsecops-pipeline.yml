@@ -1,4 +1,3 @@
-
 name: DevSecOps Pipeline
 
 on:
@@ -9,9 +8,6 @@ on:
 
 jobs:
 
-  # ─────────────────────────────────────
-  # ÉTAPE 1 — GitLeaks (Secret Scanning)
-  # ─────────────────────────────────────
   gitleaks:
     name: 🔑 Secret Scanning (GitLeaks)
     runs-on: ubuntu-latest
@@ -25,36 +21,25 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         continue-on-error: true
 
-    # ─────────────────────────────────────
-    # ÉTAPE 2 — SAST (SonarQube)
-    # ─────────────────────────────────────
-    sast:
-      name: 🔍 SAST Analysis (SonarQube)
-      runs-on: ubuntu-latest
-      steps:
-        - uses: actions/checkout@v4
-          with:
-            fetch-depth: 0
-        - name: Set up JDK 21
-          uses: actions/setup-java@v4
-          with:
-            java-version: '21'
-            distribution: 'temurin'
-        - name: Build and Analyze with SonarCloud
-          run: mvn clean verify sonar:sonar
-            -Dsonar.projectKey=bachirsoukaina_devsecops-pipeline
-            -Dsonar.organization=bachirsoukaina
-            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }}
-            -Dsonar.token=${{ secrets.SONAR_TOKEN }}
-            -DskipTests
-          working-directory: backend
-          env:
-            SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          continue-on-error: true
+  sast:
+    name: 🔍 SAST Analysis (SonarQube)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+      - name: Build and Analyze with SonarCloud
+        run: mvn clean verify sonar:sonar -Dsonar.projectKey=bachirsoukaina_devsecops-pipeline -Dsonar.organization=bachirsoukaina -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} -Dsonar.token=${{ secrets.SONAR_TOKEN }} -DskipTests
+        working-directory: backend
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        continue-on-error: true
 
-  # ─────────────────────────────────────
-  # ÉTAPE 3 — SCA (OWASP Dependency Check)
-  # ─────────────────────────────────────
   sca:
     name: 📦 Dependency Check (OWASP)
     runs-on: ubuntu-latest
@@ -79,9 +64,6 @@ jobs:
           name: dependency-check-report
           path: reports/dependency-check
 
-  # ─────────────────────────────────────
-  # ÉTAPE 4 — Container Security (Trivy)
-  # ─────────────────────────────────────
   trivy:
     name: 🐳 Container Scan (Trivy)
     runs-on: ubuntu-latest
@@ -97,9 +79,6 @@ jobs:
           severity: 'CRITICAL,HIGH'
         continue-on-error: true
 
-  # ─────────────────────────────────────
-  # ÉTAPE 5 — IaC Security (Checkov)
-  # ─────────────────────────────────────
   checkov:
     name: 🏗️ IaC Security (Checkov)
     runs-on: ubuntu-latest
@@ -112,9 +91,6 @@ jobs:
           framework: dockerfile
         continue-on-error: true
 
-  # ─────────────────────────────────────
-  # ÉTAPE 6 — DAST (OWASP ZAP)
-  # ─────────────────────────────────────
   dast:
     name: 🌐 DAST Scan (OWASP ZAP)
     runs-on: ubuntu-latest
