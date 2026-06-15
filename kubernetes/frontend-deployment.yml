@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: react-frontend
+  namespace: devsecops
+  labels:
+    app: react-frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: react-frontend
+  template:
+    metadata:
+      labels:
+        app: react-frontend
+    spec:
+      containers:
+        - name: react-frontend
+          image: react-frontend:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "200m"
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: react-frontend-service
+  namespace: devsecops
+spec:
+  selector:
+    app: react-frontend
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+  type: LoadBalancer
