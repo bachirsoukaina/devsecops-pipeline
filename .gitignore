@@ -30,3 +30,8 @@ target/
 *.iml
 .mvn/
 >>>>>>> 3950f43b0fb2df745628ff83aa65aa88f0b8c0c6
+# Terraform
+infrastructure/.terraform/
+infrastructure/.terraform.lock.hcl
+infrastructure/terraform.tfstate
+infrastructure/terraform.tfstate.backup
