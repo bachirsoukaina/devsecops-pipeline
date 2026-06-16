@@ -50,19 +50,15 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
-      - name: OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
-        with:
-          project: 'demo-app'
-          path: 'backend'
-          format: 'HTML'
-          out: 'dependency-check-report'
+      - name: OWASP Dependency Check via Maven
+        run: mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=0
+        working-directory: backend
         continue-on-error: true
       - name: Upload Report
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
-          path: dependency-check-report
+          path: backend/target/dependency-check-report.html
 
   trivy:
     name: 🐳 Container Scan (Trivy)
