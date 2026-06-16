@@ -40,7 +40,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         continue-on-error: true
 
-  sca:
+     sca:
     name: 📦 Dependency Check (OWASP)
     runs-on: ubuntu-latest
     steps:
@@ -56,13 +56,13 @@ jobs:
           project: 'demo-app'
           path: 'backend'
           format: 'HTML'
-          out: 'reports/dependency-check'
+          out: 'dependency-check-report'
         continue-on-error: true
       - name: Upload Report
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
-          path: reports/dependency-check
+          path: dependency-check-report
 
   trivy:
     name: 🐳 Container Scan (Trivy)
