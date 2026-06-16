@@ -10,9 +10,9 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  #============================================
+  # ============================================
   # 1. SECRET SCANNING - GitLeaks
-  #============================================
+  # ============================================
   gitleaks:
     name: 🔑 Secret Scanning (GitLeaks)
     runs-on: ubuntu-latest
@@ -22,12 +22,30 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install Gitleaks
+        run: |
+          wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz
+          tar -xzf gitleaks_8.24.3_linux_x64.tar.gz
+          chmod +x gitleaks
+          sudo mv gitleaks /usr/local/bin/
+
+      - name: Show files to scan
+        run: |
+          echo "📁 Fichiers à scanner :"
+          find . -name "*.properties" -o -name "*.yml" -o -name "*.yaml" -o -name "*.json" -o -name "*.java"
+          echo ""
+          echo "📄 Contenu de application.properties :"
+          cat backend/src/main/resources/application.properties 2>/dev/null || echo "Fichier non trouvé"
+
       - name: Run GitLeaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: --verbose
+        run: |
+          gitleaks detect \
+            --source . \
+            --config .gitleaks.toml \
+            --verbose \
+            --exit-code 1 \
+            --report-format sarif \
+            --report-path results.sarif
 
       - name: Upload GitLeaks results
         if: always()
@@ -36,9 +54,9 @@ jobs:
           name: gitleaks-results
           path: results.sarif
 
-  #============================================
+  # ============================================
   # 2. SAST - SonarQube
-  #============================================
+  # ============================================
   sast:
     name: 🔍 SAST Analysis (SonarQube)
     runs-on: ubuntu-latest
@@ -90,9 +108,9 @@ jobs:
           name: sonarqube-results
           path: backend/target/sonar/
 
-  #============================================
+  # ============================================
   # 3. SCA - OWASP Dependency Check
-  #============================================
+  # ============================================
   sca:
     name: 📦 Dependency Check (OWASP SCA)
     runs-on: ubuntu-latest
@@ -128,9 +146,9 @@ jobs:
           name: owasp-dependency-check-report
           path: backend/target/owasp-reports/
 
-  #============================================
+  # ============================================
   # 4. CONTAINER SECURITY - Trivy
-  #============================================
+  # ============================================
   trivy:
     name: 🐳 Container Scan (Trivy)
     runs-on: ubuntu-latest
@@ -157,9 +175,9 @@ jobs:
           name: trivy-results
           path: trivy-results.txt
 
-  #============================================
+  # ============================================
   # 5. IAC SECURITY - Checkov
-  #============================================
+  # ============================================
   checkov:
     name: 🏗️ IaC Security (Checkov)
     runs-on: ubuntu-latest
@@ -184,9 +202,9 @@ jobs:
           name: checkov-results
           path: results.sarif
 
-  #============================================
+  # ============================================
   # 6. DAST - OWASP ZAP
-  #============================================
+  # ============================================
   dast:
     name: 🌐 DAST Scan (OWASP ZAP)
     runs-on: ubuntu-latest
@@ -243,9 +261,9 @@ jobs:
           name: spring-boot-logs
           path: backend/spring-boot.log
 
-  #============================================
+  # ============================================
   # 7. FINAL STATUS - Summary
-  #============================================
+  # ============================================
   summary:
     name: 📊 Security Pipeline Summary
     runs-on: ubuntu-latest
