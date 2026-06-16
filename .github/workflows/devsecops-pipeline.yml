@@ -109,7 +109,6 @@ jobs:
             -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
             -Dsonar.coverage.exclusions=**/*Test.java \
             -Dsonar.java.binaries=target/classes \
-            -Dsonar.analysis.mode=analysis \
             -DskipTests
         working-directory: backend
         env:
