@@ -40,7 +40,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         continue-on-error: true
 
-     sca:
+  sca:
     name: 📦 Dependency Check (OWASP)
     runs-on: ubuntu-latest
     steps:
