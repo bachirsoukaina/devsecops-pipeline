@@ -1,0 +1,40 @@
+title = "DevSecOps Pipeline - Gitleaks Configuration"
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "aws-access-key"
+description = "AWS Access Key"
+regex = '''AKIA[0-9A-Z]{16}'''
+tags = ["aws", "secret"]
+
+[[rules]]
+id = "aws-secret-key"
+description = "AWS Secret Key"
+regex = '''[A-Za-z0-9/+=]{40}'''
+tags = ["aws", "secret"]
+
+[[rules]]
+id = "jwt-secret"
+description = "JWT Secret in properties files"
+regex = '''jwt\.secret\s*=\s*[a-zA-Z0-9]+'''
+tags = ["jwt", "secret"]
+
+[[rules]]
+id = "github-token"
+description = "GitHub Personal Access Token"
+regex = '''ghp_[a-zA-Z0-9]{36}'''
+tags = ["github", "token"]
+
+[[rules]]
+id = "api-key"
+description = "Generic API Key"
+regex = '''api[_-]?key\s*=\s*[a-zA-Z0-9]+'''
+tags = ["api", "key"]
+
+[[rules]]
+id = "database-password"
+description = "Database Password"
+regex = '''password\s*=\s*[a-zA-Z0-9!@#$%^&*()_+]+'''
+tags = ["database", "password"]

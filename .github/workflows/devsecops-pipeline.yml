@@ -6,119 +6,339 @@ on:
   pull_request:
     branches: [ main ]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true  # Évite les warnings Node.js
+
 jobs:
 
-  # ===== 1. SECRET SCANNING =====
+  # ============================================
+  # 1. SECRET SCANNING - GitLeaks
+  # ============================================
   gitleaks:
     name: 🔑 Secret Scanning (GitLeaks)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Run GitLeaks
+
+      - name: Run GitLeaks with custom config
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # ❌ SUPPRIMER continue-on-error: true
-        # Le pipeline doit échouer si des secrets sont détectés
+        with:
+          config: |
+            [extend]
+              useDefault = true
+            [[rules]]
+              id = "aws-access-key"
+              description = "AWS Access Key"
+              regex = '''AKIA[0-9A-Z]{16}'''
+              tags = ["aws", "secret"]
+            [[rules]]
+              id = "aws-secret-key"
+              description = "AWS Secret Key"
+              regex = '''[A-Za-z0-9/+=]{40}'''
+              tags = ["aws", "secret"]
+            [[rules]]
+              id = "jwt-secret"
+              description = "JWT Secret in properties"
+              regex = '''jwt\.secret\s*=\s*[a-zA-Z0-9]+'''
+              tags = ["jwt", "secret"]
+            [[rules]]
+              id = "github-token"
+              description = "GitHub Personal Access Token"
+              regex = '''ghp_[a-zA-Z0-9]{36}'''
+              tags = ["github", "token"]
+            [[rules]]
+              id = "generic-api-key"
+              description = "Generic API Key"
+              regex = '''api[_-]?key\s*=\s*[a-zA-Z0-9]+'''
+              tags = ["api", "key"]
 
-  # ===== 2. SAST - SONARQUBE =====
+      - name: Upload GitLeaks results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitleaks-results
+          path: gitleaks-results.sarif
+
+  # ============================================
+  # 2. SAST - SonarQube
+  # ============================================
   sast:
     name: 🔍 SAST Analysis (SonarQube)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
+
+      - name: Cache SonarCloud packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.sonar/cache
+          key: ${{ runner.os }}-sonar
+          restore-keys: ${{ runner.os }}-sonar
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
       - name: Build and Analyze with SonarCloud
-        run: mvn clean verify sonar:sonar -Dsonar.projectKey=bachirsoukaina_devsecops-pipeline -Dsonar.organization=bachirsoukaina -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} -Dsonar.token=${{ secrets.SONAR_TOKEN }} -DskipTests
+        run: mvn clean verify sonar:sonar \
+          -Dsonar.projectKey=bachirsoukaina_devsecops-pipeline \
+          -Dsonar.organization=bachirsoukaina \
+          -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} \
+          -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
+          -Dsonar.coverage.exclusions=**/*Test.java \
+          -Dsonar.java.binaries=target/classes \
+          -DskipTests
         working-directory: backend
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        # ❌ SUPPRIMER continue-on-error: true
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ===== 3. SCA - OWASP DEPENDENCY CHECK =====
+      - name: Upload SonarQube results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: sonarqube-results
+          path: backend/target/sonar/
+
+  # ============================================
+  # 3. SCA - OWASP Dependency Check
+  # ============================================
   sca:
-    name: 📦 Dependency Check (OWASP)
+    name: 📦 Dependency Check (OWASP SCA)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
       - name: OWASP Dependency Check via Maven
-        run: mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7
+        run: |
+          mvn org.owasp:dependency-check-maven:check \
+            -DfailBuildOnCVSS=7 \
+            -Dformat=ALL \
+            -DoutputDirectory=target/owasp-reports
         working-directory: backend
-        # ❌ SUPPRIMER continue-on-error: true
-        # failBuildOnCVSS=7 signifie : échoue si CVE >= 7
-      - name: Upload Report
+
+      - name: Upload OWASP Report
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: dependency-check-report
-          path: backend/target/dependency-check-report.html
-        if: always()
+          name: owasp-dependency-check-report
+          path: backend/target/owasp-reports/
 
-  # ===== 4. CONTAINER SECURITY - TRIVY =====
+  # ============================================
+  # 4. CONTAINER SECURITY - Trivy
+  # ============================================
   trivy:
     name: 🐳 Container Scan (Trivy)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Build Docker Image
         run: docker build -t demo-app:latest ./backend
+
       - name: Run Trivy Scan
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'demo-app:latest'
           format: 'table'
-          severity: 'CRITICAL,HIGH'
-          exit-code: '1'  # ⚠️ AJOUTER : échoue si des vulnérabilités sont trouvées
-          ignore-unfixed: true
-        # ❌ SUPPRIMER continue-on-error: true
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '1'
+          ignore-unfixed: false
 
-  # ===== 5. IAC SECURITY - CHECKOV =====
+      - name: Upload Trivy results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: trivy-results
+          path: trivy-results.txt
+
+  # ============================================
+  # 5. IAC SECURITY - Checkov
+  # ============================================
   checkov:
     name: 🏗️ IaC Security (Checkov)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Run Checkov
         uses: bridgecrewio/checkov-action@master
         with:
           directory: .
-          framework: terraform,dockerfile
-          soft_fail: false  # ⚠️ AJOUTER : échoue si des violations sont trouvées
-        # ❌ SUPPRIMER continue-on-error: true
+          framework: terraform,dockerfile,kubernetes
+          output_format: cli,sarif
+          soft_fail: false
+          download_external_modules: true
+          log_level: WARNING
 
-  # ===== 6. DAST - OWASP ZAP =====
+      - name: Upload Checkov results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkov-results
+          path: results.sarif
+
+  # ============================================
+  # 6. DAST - OWASP ZAP
+  # ============================================
   dast:
     name: 🌐 DAST Scan (OWASP ZAP)
     runs-on: ubuntu-latest
     needs: [gitleaks, sast, sca, trivy, checkov]
-    if: success()  # ⚠️ AJOUTER : ne s'exécute que si les précédents réussissent
+    if: always()  # S'exécute même si précédents échouent, pour voir tous les résultats
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
-      - name: Start Spring Boot
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Start Spring Boot Application
         run: |
           cd backend
-          mvn spring-boot:run &
-          sleep 30
-      - name: OWASP ZAP Baseline Scan
+          nohup mvn spring-boot:run > spring-boot.log 2>&1 &
+          echo "⏳ Waiting for Spring Boot to start..."
+          for i in {1..60}; do
+            if curl -s http://localhost:8080/actuator/health > /dev/null; then
+              echo "✅ Spring Boot started successfully!"
+              break
+            fi
+            echo "⏳ Waiting... ($i/60)"
+            sleep 2
+          done
+
+      - name: Run OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.12.0
         with:
           target: 'http://localhost:8080'
-          cmd_options: '-a'  # Active tous les tests
-        # ❌ SUPPRIMER continue-on-error: true
+          cmd_options: '-a -r zap-report.html'
+
+      - name: Upload ZAP Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report
+          path: zap-report.html
+
+      - name: Upload Spring Boot logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spring-boot-logs
+          path: backend/spring-boot.log
+
+  # ============================================
+  # 7. FINAL STATUS - Résumé
+  # ============================================
+  summary:
+    name: 📊 Security Pipeline Summary
+    runs-on: ubuntu-latest
+    needs: [gitleaks, sast, sca, trivy, checkov, dast]
+    if: always()
+    steps:
+      - name: Check pipeline status
+        run: |
+          echo "📊 DevSecOps Pipeline Summary"
+          echo "================================="
+          
+          # GitLeaks
+          if [ "${{ needs.gitleaks.result }}" == "success" ]; then
+            echo "✅ GitLeaks: PASSED"
+          else
+            echo "❌ GitLeaks: FAILED"
+          fi
+          
+          # SonarQube
+          if [ "${{ needs.sast.result }}" == "success" ]; then
+            echo "✅ SonarQube: PASSED"
+          else
+            echo "❌ SonarQube: FAILED"
+          fi
+          
+          # OWASP
+          if [ "${{ needs.sca.result }}" == "success" ]; then
+            echo "✅ OWASP SCA: PASSED"
+          else
+            echo "❌ OWASP SCA: FAILED"
+          fi
+          
+          # Trivy
+          if [ "${{ needs.trivy.result }}" == "success" ]; then
+            echo "✅ Trivy: PASSED"
+          else
+            echo "❌ Trivy: FAILED"
+          fi
+          
+          # Checkov
+          if [ "${{ needs.checkov.result }}" == "success" ]; then
+            echo "✅ Checkov: PASSED"
+          else
+            echo "❌ Checkov: FAILED"
+          fi
+          
+          # ZAP
+          if [ "${{ needs.dast.result }}" == "success" ]; then
+            echo "✅ ZAP: PASSED"
+          else
+            echo "❌ ZAP: FAILED"
+          fi
+          
+          echo "================================="
+          
+          # Vérifier si tous ont réussi
+          if [ "${{ needs.gitleaks.result }}" == "success" ] && \
+             [ "${{ needs.sast.result }}" == "success" ] && \
+             [ "${{ needs.sca.result }}" == "success" ] && \
+             [ "${{ needs.trivy.result }}" == "success" ] && \
+             [ "${{ needs.checkov.result }}" == "success" ] && \
+             [ "${{ needs.dast.result }}" == "success" ]; then
+            echo "✅ All security checks PASSED - Pipeline can proceed"
+            exit 0
+          else
+            echo "❌ Security checks FAILED - Pipeline blocked"
+            echo "🚫 Deployment blocked due to security violations"
+            exit 1
+          fi
