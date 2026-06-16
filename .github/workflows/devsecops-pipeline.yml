@@ -2,12 +2,13 @@ name: DevSecOps Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, test-security-pipeline ]
   pull_request:
     branches: [ main ]
 
 jobs:
 
+  # ===== 1. SECRET SCANNING =====
   gitleaks:
     name: 🔑 Secret Scanning (GitLeaks)
     runs-on: ubuntu-latest
@@ -19,8 +20,10 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
+        # ❌ SUPPRIMER continue-on-error: true
+        # Le pipeline doit échouer si des secrets sont détectés
 
+  # ===== 2. SAST - SONARQUBE =====
   sast:
     name: 🔍 SAST Analysis (SonarQube)
     runs-on: ubuntu-latest
@@ -38,8 +41,9 @@ jobs:
         working-directory: backend
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        continue-on-error: true
+        # ❌ SUPPRIMER continue-on-error: true
 
+  # ===== 3. SCA - OWASP DEPENDENCY CHECK =====
   sca:
     name: 📦 Dependency Check (OWASP)
     runs-on: ubuntu-latest
@@ -51,15 +55,18 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
       - name: OWASP Dependency Check via Maven
-        run: mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=0
+        run: mvn org.owasp:dependency-check-maven:check -DfailBuildOnCVSS=7
         working-directory: backend
-        continue-on-error: true
+        # ❌ SUPPRIMER continue-on-error: true
+        # failBuildOnCVSS=7 signifie : échoue si CVE >= 7
       - name: Upload Report
         uses: actions/upload-artifact@v4
         with:
           name: dependency-check-report
           path: backend/target/dependency-check-report.html
+        if: always()
 
+  # ===== 4. CONTAINER SECURITY - TRIVY =====
   trivy:
     name: 🐳 Container Scan (Trivy)
     runs-on: ubuntu-latest
@@ -73,8 +80,11 @@ jobs:
           image-ref: 'demo-app:latest'
           format: 'table'
           severity: 'CRITICAL,HIGH'
-        continue-on-error: true
+          exit-code: '1'  # ⚠️ AJOUTER : échoue si des vulnérabilités sont trouvées
+          ignore-unfixed: true
+        # ❌ SUPPRIMER continue-on-error: true
 
+  # ===== 5. IAC SECURITY - CHECKOV =====
   checkov:
     name: 🏗️ IaC Security (Checkov)
     runs-on: ubuntu-latest
@@ -84,13 +94,16 @@ jobs:
         uses: bridgecrewio/checkov-action@master
         with:
           directory: .
-          framework: dockerfile
-        continue-on-error: true
+          framework: terraform,dockerfile
+          soft_fail: false  # ⚠️ AJOUTER : échoue si des violations sont trouvées
+        # ❌ SUPPRIMER continue-on-error: true
 
+  # ===== 6. DAST - OWASP ZAP =====
   dast:
     name: 🌐 DAST Scan (OWASP ZAP)
     runs-on: ubuntu-latest
     needs: [gitleaks, sast, sca, trivy, checkov]
+    if: success()  # ⚠️ AJOUTER : ne s'exécute que si les précédents réussissent
     steps:
       - uses: actions/checkout@v4
       - name: Set up JDK 21
@@ -103,8 +116,9 @@ jobs:
           cd backend
           mvn spring-boot:run &
           sleep 30
-      - name: OWASP ZAP Scan
+      - name: OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.12.0
         with:
           target: 'http://localhost:8080'
-        continue-on-error: true
+          cmd_options: '-a'  # Active tous les tests
+        # ❌ SUPPRIMER continue-on-error: true
