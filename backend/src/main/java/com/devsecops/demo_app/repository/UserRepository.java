@@ -9,11 +9,14 @@ import java.util.Optional;
 @Repository
 public interface UserRepository extends JpaRepository<User, Long> {
 
-    // Recherche normale
+    // Recherche normale sécurisée
     Optional<User> findByUsername(String username);
 
-    // ⚠️ Faille SQL intentionnelle (pour SAST/SonarQube)
-    @Query(value = "SELECT * FROM users WHERE username = :username OR '1'='1'",
-            nativeQuery = true)
-    Optional<User> findByUsernameVulnerable(String username);
+    // ⚠️ VRAIE INJECTION SQL (SonarQube détectera)
+    @Query(value = "SELECT * FROM users WHERE username = '" + "admin' OR '1'='1" + "'", nativeQuery = true)
+    Optional<User> findByUsernameVulnerable();
+
+    // ⚠️ AUTRE INJECTION SQL avec paramètre
+    @Query(value = "SELECT * FROM users WHERE username = :username OR 1=1", nativeQuery = true)
+    Optional<User> findByUsernameInjection(@Param("username") String username);
 }
