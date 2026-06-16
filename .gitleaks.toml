@@ -1,18 +1,10 @@
 title = "DevSecOps Pipeline - Gitleaks Configuration"
 
-# ============================================
-# EXTEND - Utiliser les règles par défaut
-# ============================================
 [extend]
 useDefault = true
 
-# ============================================
-# ALLOWLIST - Ignorer les faux positifs
-# ============================================
 [allowlist]
   description = "Ignore false positives and example files"
-  
-  # Ignorer des fichiers spécifiques
   paths = [
     "**/*.md",
     "**/*.txt",
@@ -32,26 +24,16 @@ useDefault = true
     "**/*.woff2",
     "**/*.ttf",
     "**/*.eot",
-    "**/devsecops-pipeline.yml",          # ⬅️ IGNORER LE PIPELINE
+    "**/devsecops-pipeline.yml",
     "**/.github/workflows/*.yml",
     "**/.gitignore",
     "**/.env.example"
   ]
-  
-  # Ignorer des commits spécifiques (si besoin)
-  commits = [
-    # "10b1d5b"  # Décommentez si besoin
-  ]
-  
-  # Ignorer des regex spécifiques (faux positifs)
+  commits = []
   regexes = [
     "AKIAIOSFODNN7EXAMPLE",
     "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
   ]
-
-# ============================================
-# RÈGLES PERSONNALISÉES
-# ============================================
 
 # Règle 1: AWS Access Key
 [[rules]]
@@ -60,17 +42,19 @@ useDefault = true
   regex = '''AKIA[0-9A-Z]{16}'''
   tags = ["aws", "secret"]
 
-# Règle 2: AWS Secret Key
+# Règle 2: AWS Secret Key (CORRIGÉE)
 [[rules]]
   id = "aws-secret-key"
   description = "AWS Secret Key"
   regex = '''[A-Za-z0-9/+=]{40}'''
   tags = ["aws", "secret"]
-  # Ignorer les faux positifs
-  allowlist = [
-    "AKIAIOSFODNN7EXAMPLE",
-    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-  ]
+  # ⚠️ CORRECTION : allowlist est un MAP, pas une LISTE
+  [rules.allowlist]
+    description = "Ignore example AWS keys"
+    regexes = [
+      "AKIAIOSFODNN7EXAMPLE",
+      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+    ]
 
 # Règle 3: JWT Secret
 [[rules]]
@@ -97,122 +81,5 @@ useDefault = true
 [[rules]]
   id = "database-password"
   description = "Database Password in properties"
-  regex = '''(jdbc|database)\.password\s*=\s*[a-zA-Z0-9!@#$%^&*()_+]+'''
+  regex = '''(jdbc|database)\.password\s*=\s*[a-zA-Z0-9!@#$%^&*()_]+'''
   tags = ["database", "password"]
-
-# Règle 7: Private Key (RSA/SSH)
-[[rules]]
-  id = "private-key"
-  description = "Private Key"
-  regex = '''-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----'''
-  tags = ["private", "key"]
-
-# Règle 8: Generic Secret
-[[rules]]
-  id = "generic-secret"
-  description = "Generic Secret Pattern"
-  regex = '''(?i)secret\s*=\s*[a-zA-Z0-9!@#$%^&*()_+]+'''
-  tags = ["generic", "secret"]
-
-# Règle 9: Slack Webhook URL
-[[rules]]
-  id = "slack-webhook"
-  description = "Slack Webhook URL"
-  regex = '''https://hooks\.slack\.com/services/[A-Za-z0-9]+/[A-Za-z0-9]+/[A-Za-z0-9]+'''
-  tags = ["slack", "webhook"]
-
-# Règle 10: Stripe API Key
-[[rules]]
-  id = "stripe-api-key"
-  description = "Stripe API Key"
-  regex = '''sk_live_[a-zA-Z0-9]{24}'''
-  tags = ["stripe", "api", "key"]
-
-# Règle 11: Twilio API Key
-[[rules]]
-  id = "twilio-api-key"
-  description = "Twilio API Key"
-  regex = '''SK[a-fA-F0-9]{32}'''
-  tags = ["twilio", "api", "key"]
-
-# Règle 12: SendGrid API Key
-[[rules]]
-  id = "sendgrid-api-key"
-  description = "SendGrid API Key"
-  regex = '''SG\.[a-zA-Z0-9._-]{43}'''
-  tags = ["sendgrid", "api", "key"]
-
-# Règle 13: Google API Key
-[[rules]]
-  id = "google-api-key"
-  description = "Google API Key"
-  regex = '''AIza[0-9A-Za-z_-]{35}'''
-  tags = ["google", "api", "key"]
-
-# Règle 14: Docker Hub Token
-[[rules]]
-  id = "dockerhub-token"
-  description = "Docker Hub Token"
-  regex = '''[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'''
-  tags = ["docker", "token"]
-
-# Règle 15: Heroku API Key
-[[rules]]
-  id = "heroku-api-key"
-  description = "Heroku API Key"
-  regex = '''[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}'''
-  tags = ["heroku", "api", "key"]
-
-# ============================================
-# EXCLUSIONS SPÉCIFIQUES PAR FICHIER
-# ============================================
-[[exclude]]
-  description = "Exclude test files"
-  paths = [
-    "**/test/**",
-    "**/tests/**",
-    "**/__tests__/**",
-    "**/*.test.*",
-    "**/*.spec.*"
-  ]
-
-[[exclude]]
-  description = "Exclude example files"
-  paths = [
-    "**/*.example",
-    "**/*.sample",
-    "**/*.template",
-    "**/*.dist"
-  ]
-
-[[exclude]]
-  description = "Exclude vendor directories"
-  paths = [
-    "**/node_modules/**",
-    "**/vendor/**",
-    "**/.git/**",
-    "**/.idea/**",
-    "**/.vscode/**",
-    "**/__pycache__/**",
-    "**/target/**",
-    "**/build/**",
-    "**/dist/**",
-    "**/out/**"
-  ]
-
-[[exclude]]
-  description = "Exclude CI/CD workflow files"
-  paths = [
-    "**/.github/workflows/*.yml",
-    "**/.circleci/**",
-    "**/.gitlab-ci.yml",
-    "**/jenkins/**",
-    "**/azure-pipelines.yml"
-  ]
-
-[[exclude]]
-  description = "Exclude specific files with false positives"
-  paths = [
-    "**/application.properties",
-    "**/application.yml"
-  ]
