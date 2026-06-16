@@ -4,47 +4,33 @@ title = "DevSecOps Pipeline - Gitleaks Configuration"
 useDefault = true
 
 # ============================================
-# RÈGLES POUR DÉTECTER NOS VULNÉRABILITÉS
+# RÈGLES SPÉCIFIQUES POUR application.properties
 # ============================================
 
-# Règle 1: AWS Access Key
+# Règle 1: JWT Secret
 [[rules]]
-  id = "aws-access-key"
-  description = "AWS Access Key"
-  regex = '''AKIA[0-9A-Z]{16}'''
-  tags = ["aws", "secret"]
-
-# Règle 2: AWS Secret Key
-[[rules]]
-  id = "aws-secret-key"
-  description = "AWS Secret Key"
-  regex = '''[A-Za-z0-9/+=]{40}'''
-  tags = ["aws", "secret"]
-
-# Règle 3: JWT Secret
-[[rules]]
-  id = "jwt-secret"
-  description = "JWT Secret"
+  id = "jwt-secret-hardcoded"
+  description = "JWT Secret hardcoded in application.properties"
   regex = '''jwt\.secret\s*=\s*[a-zA-Z0-9]+'''
-  tags = ["jwt", "secret"]
+  tags = ["jwt", "secret", "hardcoded"]
 
-# Règle 4: GitHub Token
+# Règle 2: AWS Access Key
 [[rules]]
-  id = "github-token"
-  description = "GitHub Token"
-  regex = '''ghp_[a-zA-Z0-9]{36}'''
-  tags = ["github", "token"]
+  id = "aws-access-key-hardcoded"
+  description = "AWS Access Key hardcoded"
+  regex = '''AKIA[0-9A-Z]{16}'''
+  tags = ["aws", "secret", "hardcoded"]
 
-# Règle 5: Database Password
+# Règle 3: AWS Secret Key
 [[rules]]
-  id = "database-password"
-  description = "Database Password"
-  regex = '''password\s*=\s*[a-zA-Z0-9!@#$%^&*()_]+'''
-  tags = ["database", "password"]
+  id = "aws-secret-key-hardcoded"
+  description = "AWS Secret Key hardcoded"
+  regex = '''[A-Za-z0-9/+=]{40}'''
+  tags = ["aws", "secret", "hardcoded"]
 
-# Règle 6: Generic Secret
+# Règle 4: Generic Secret
 [[rules]]
   id = "generic-secret"
-  description = "Generic Secret"
-  regex = '''secret\s*=\s*[a-zA-Z0-9]+'''
-  tags = ["generic", "secret"]
+  description = "Generic secret in properties files"
+  regex = '''(secret|key|token|password)\s*=\s*[a-zA-Z0-9!@#$%^&*()_]+'''
+  tags = ["secret", "hardcoded"]
