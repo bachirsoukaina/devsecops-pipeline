@@ -3,37 +3,9 @@ title = "DevSecOps Pipeline - Gitleaks Configuration"
 [extend]
 useDefault = true
 
-[allowlist]
-  description = "Ignore false positives and example files"
-  paths = [
-    "**/*.md",
-    "**/*.txt",
-    "**/README.md",
-    "**/LICENSE",
-    "**/package-lock.json",
-    "**/yarn.lock",
-    "**/go.sum",
-    "**/*.svg",
-    "**/*.png",
-    "**/*.jpg",
-    "**/*.jpeg",
-    "**/*.gif",
-    "**/*.ico",
-    "**/*.pdf",
-    "**/*.woff",
-    "**/*.woff2",
-    "**/*.ttf",
-    "**/*.eot",
-    "**/devsecops-pipeline.yml",
-    "**/.github/workflows/*.yml",
-    "**/.gitignore",
-    "**/.env.example"
-  ]
-  commits = []
-  regexes = [
-    "AKIAIOSFODNN7EXAMPLE",
-    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-  ]
+# ============================================
+# RÈGLES POUR DÉTECTER NOS VULNÉRABILITÉS
+# ============================================
 
 # Règle 1: AWS Access Key
 [[rules]]
@@ -42,44 +14,37 @@ useDefault = true
   regex = '''AKIA[0-9A-Z]{16}'''
   tags = ["aws", "secret"]
 
-# Règle 2: AWS Secret Key (CORRIGÉE)
+# Règle 2: AWS Secret Key
 [[rules]]
   id = "aws-secret-key"
   description = "AWS Secret Key"
   regex = '''[A-Za-z0-9/+=]{40}'''
   tags = ["aws", "secret"]
-  # ⚠️ CORRECTION : allowlist est un MAP, pas une LISTE
-  [rules.allowlist]
-    description = "Ignore example AWS keys"
-    regexes = [
-      "AKIAIOSFODNN7EXAMPLE",
-      "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-    ]
 
 # Règle 3: JWT Secret
 [[rules]]
   id = "jwt-secret"
-  description = "JWT Secret in properties files"
+  description = "JWT Secret"
   regex = '''jwt\.secret\s*=\s*[a-zA-Z0-9]+'''
   tags = ["jwt", "secret"]
 
 # Règle 4: GitHub Token
 [[rules]]
   id = "github-token"
-  description = "GitHub Personal Access Token"
+  description = "GitHub Token"
   regex = '''ghp_[a-zA-Z0-9]{36}'''
   tags = ["github", "token"]
 
-# Règle 5: Generic API Key
-[[rules]]
-  id = "api-key"
-  description = "Generic API Key"
-  regex = '''api[_-]?key\s*=\s*[a-zA-Z0-9]+'''
-  tags = ["api", "key"]
-
-# Règle 6: Database Password
+# Règle 5: Database Password
 [[rules]]
   id = "database-password"
-  description = "Database Password in properties"
-  regex = '''(jdbc|database)\.password\s*=\s*[a-zA-Z0-9!@#$%^&*()_]+'''
+  description = "Database Password"
+  regex = '''password\s*=\s*[a-zA-Z0-9!@#$%^&*()_]+'''
   tags = ["database", "password"]
+
+# Règle 6: Generic Secret
+[[rules]]
+  id = "generic-secret"
+  description = "Generic Secret"
+  regex = '''secret\s*=\s*[a-zA-Z0-9]+'''
+  tags = ["generic", "secret"]
