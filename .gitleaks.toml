@@ -1,218 +1,134 @@
 title = "DevSecOps Pipeline - Gitleaks Configuration"
 
-# ============================================
-# EXTEND - Utiliser les règles par défaut
-# ============================================
 [extend]
 useDefault = true
 
 # ============================================
-# ALLOWLIST - Ignorer les faux positifs
+# SINGLE ALLOWLIST BLOCK — merge all exclusions here
 # ============================================
 [allowlist]
-  description = "Ignore false positives and example files"
-  
-  # Ignorer des fichiers spécifiques
+  description = "Ignore false positives, example files, and vendor paths"
+
   paths = [
-    "**/*.md",
-    "**/*.txt",
-    "**/README.md",
-    "**/LICENSE",
-    "**/package-lock.json",
-    "**/yarn.lock",
-    "**/go.sum",
-    "**/*.svg",
-    "**/*.png",
-    "**/*.jpg",
-    "**/*.jpeg",
-    "**/*.gif",
-    "**/*.ico",
-    "**/*.pdf",
-    "**/*.woff",
-    "**/*.woff2",
-    "**/*.ttf",
-    "**/*.eot",
-    "**/devsecops-pipeline.yml",          # ⬅️ IGNORER LE PIPELINE
-    "**/.github/workflows/*.yml",
-    "**/.gitignore",
-    "**/.env.example"
+    # Documentation and lock files
+    '''.+\.md''',
+    '''.+\.txt''',
+    '''LICENSE''',
+    '''package-lock\.json''',
+    '''yarn\.lock''',
+    '''go\.sum''',
+    # Binary/asset files
+    '''.+\.(svg|png|jpg|jpeg|gif|ico|pdf|woff2?|ttf|eot)''',
+    # CI/CD workflows (avoid self-triggering false positives)
+    '''.github/workflows/.+\.yml''',
+    # Dotfiles
+    '''\.gitignore''',
+    '''\.env\.example''',
+    # Test files
+    '''.+/(test|tests|__tests__)/.+''',
+    '''.+\.(test|spec)\..+''',
+    # Example/template files
+    '''.+\.(example|sample|template|dist)''',
+    # Vendor/build directories
+    '''(node_modules|vendor|\.git|\.idea|\.vscode|__pycache__|target|build|dist|out)/.+'''
   ]
-  
-  # Ignorer des commits spécifiques (si besoin)
-  commits = [
-    # "10b1d5b"  # Décommentez si besoin
-  ]
-  
-  # Ignorer des regex spécifiques (faux positifs)
+
   regexes = [
     "AKIAIOSFODNN7EXAMPLE",
     "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
   ]
 
 # ============================================
-# RÈGLES PERSONNALISÉES
+# CUSTOM RULES
 # ============================================
 
-# Règle 1: AWS Access Key
 [[rules]]
   id = "aws-access-key"
   description = "AWS Access Key"
   regex = '''AKIA[0-9A-Z]{16}'''
   tags = ["aws", "secret"]
 
-# Règle 2: AWS Secret Key
 [[rules]]
   id = "aws-secret-key"
   description = "AWS Secret Key"
-  regex = '''[A-Za-z0-9/+=]{40}'''
+  regex = '''(?i)aws[_\-\s]?secret[_\-\s]?(?:access[_\-\s]?)?key["\s]*[=:]["\s]*([A-Za-z0-9/+=]{40})'''
   tags = ["aws", "secret"]
-  # Ignorer les faux positifs
-  allowlist = [
-    "AKIAIOSFODNN7EXAMPLE",
-    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-  ]
+  # Adding entropy avoids matching random base64 strings
+  [[rules.Entropy]]
+    Min = 3.5
+    Max = 8.0
+    Group = 1
 
-# Règle 3: JWT Secret
 [[rules]]
   id = "jwt-secret"
   description = "JWT Secret in properties files"
   regex = '''jwt\.secret\s*=\s*[a-zA-Z0-9]+'''
   tags = ["jwt", "secret"]
 
-# Règle 4: GitHub Token
 [[rules]]
   id = "github-token"
   description = "GitHub Personal Access Token"
   regex = '''ghp_[a-zA-Z0-9]{36}'''
   tags = ["github", "token"]
 
-# Règle 5: Generic API Key
 [[rules]]
   id = "api-key"
   description = "Generic API Key"
   regex = '''api[_-]?key\s*=\s*[a-zA-Z0-9]+'''
   tags = ["api", "key"]
 
-# Règle 6: Database Password
 [[rules]]
   id = "database-password"
   description = "Database Password in properties"
   regex = '''(jdbc|database)\.password\s*=\s*[a-zA-Z0-9!@#$%^&*()_+]+'''
   tags = ["database", "password"]
 
-# Règle 7: Private Key (RSA/SSH)
 [[rules]]
   id = "private-key"
   description = "Private Key"
   regex = '''-----BEGIN (RSA|DSA|EC|OPENSSH) PRIVATE KEY-----'''
   tags = ["private", "key"]
 
-# Règle 8: Generic Secret
 [[rules]]
   id = "generic-secret"
   description = "Generic Secret Pattern"
   regex = '''(?i)secret\s*=\s*[a-zA-Z0-9!@#$%^&*()_+]+'''
   tags = ["generic", "secret"]
 
-# Règle 9: Slack Webhook URL
 [[rules]]
   id = "slack-webhook"
   description = "Slack Webhook URL"
   regex = '''https://hooks\.slack\.com/services/[A-Za-z0-9]+/[A-Za-z0-9]+/[A-Za-z0-9]+'''
   tags = ["slack", "webhook"]
 
-# Règle 10: Stripe API Key
 [[rules]]
   id = "stripe-api-key"
   description = "Stripe API Key"
   regex = '''sk_live_[a-zA-Z0-9]{24}'''
   tags = ["stripe", "api", "key"]
 
-# Règle 11: Twilio API Key
 [[rules]]
   id = "twilio-api-key"
   description = "Twilio API Key"
   regex = '''SK[a-fA-F0-9]{32}'''
   tags = ["twilio", "api", "key"]
 
-# Règle 12: SendGrid API Key
 [[rules]]
   id = "sendgrid-api-key"
   description = "SendGrid API Key"
   regex = '''SG\.[a-zA-Z0-9._-]{43}'''
   tags = ["sendgrid", "api", "key"]
 
-# Règle 13: Google API Key
 [[rules]]
   id = "google-api-key"
   description = "Google API Key"
   regex = '''AIza[0-9A-Za-z_-]{35}'''
   tags = ["google", "api", "key"]
 
-# Règle 14: Docker Hub Token
-[[rules]]
-  id = "dockerhub-token"
-  description = "Docker Hub Token"
-  regex = '''[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'''
-  tags = ["docker", "token"]
-
-# Règle 15: Heroku API Key
+# NOTE: dockerhub-token rule removed — its UUID regex was identical to heroku-api-key
+# Docker Hub access tokens use a different format: dckr_pat_... — add that instead if needed
 [[rules]]
   id = "heroku-api-key"
   description = "Heroku API Key"
   regex = '''[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}'''
   tags = ["heroku", "api", "key"]
-
-# ============================================
-# EXCLUSIONS SPÉCIFIQUES PAR FICHIER
-# ============================================
-[[exclude]]
-  description = "Exclude test files"
-  paths = [
-    "**/test/**",
-    "**/tests/**",
-    "**/__tests__/**",
-    "**/*.test.*",
-    "**/*.spec.*"
-  ]
-
-[[exclude]]
-  description = "Exclude example files"
-  paths = [
-    "**/*.example",
-    "**/*.sample",
-    "**/*.template",
-    "**/*.dist"
-  ]
-
-[[exclude]]
-  description = "Exclude vendor directories"
-  paths = [
-    "**/node_modules/**",
-    "**/vendor/**",
-    "**/.git/**",
-    "**/.idea/**",
-    "**/.vscode/**",
-    "**/__pycache__/**",
-    "**/target/**",
-    "**/build/**",
-    "**/dist/**",
-    "**/out/**"
-  ]
-
-[[exclude]]
-  description = "Exclude CI/CD workflow files"
-  paths = [
-    "**/.github/workflows/*.yml",
-    "**/.circleci/**",
-    "**/.gitlab-ci.yml",
-    "**/jenkins/**",
-    "**/azure-pipelines.yml"
-  ]
-
-[[exclude]]
-  description = "Exclude specific files with false positives"
-  paths = [
-    "**/application.properties",
-    "**/application.yml"
-  ]
