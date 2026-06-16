@@ -22,17 +22,10 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Show application.properties content
-        run: |
-          echo "📄 Contenu de application.properties :"
-          cat backend/src/main/resources/application.properties || echo "Fichier non trouvé"
-
-      - name: Run GitLeaks with custom config
+      - name: Run GitLeaks
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          args: --verbose
 
       - name: Upload GitLeaks results
         if: always()
