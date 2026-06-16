@@ -37,8 +37,20 @@ jobs:
           echo "📄 Contenu de application.properties :"
           cat backend/src/main/resources/application.properties 2>/dev/null || echo "Fichier non trouvé"
 
-      - name: Run GitLeaks
+      - name: Run GitLeaks on application.properties
         run: |
+          echo "🔍 Scanning application.properties for hardcoded secrets..."
+          gitleaks detect \
+            --source backend/src/main/resources/ \
+            --config .gitleaks.toml \
+            --verbose \
+            --exit-code 0 \
+            --report-format sarif \
+            --report-path results-properties.sarif || true
+
+      - name: Run GitLeaks on all code
+        run: |
+          echo "🔍 Scanning all code for secrets..."
           gitleaks detect \
             --source . \
             --config .gitleaks.toml \
@@ -52,7 +64,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gitleaks-results
-          path: results.sarif
+          path: |
+            results.sarif
+            results-properties.sarif
 
   # ============================================
   # 2. SAST - SonarQube
