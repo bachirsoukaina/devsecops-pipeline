@@ -61,18 +61,16 @@ useDefault = true
   tags = ["github", "token", "hardcoded"]
 
 # ============================================
-# ALLOWLIST - Ignorer les faux positifs
+# ALLOWLIST - SANS ** (CAUSE LE PANIC)
 # ============================================
 [allowlist]
   description = "Ignore false positives"
   paths = [
-    "**/*.md",
-    "**/*.txt",
-    "**/README.md",
-    "**/LICENSE",
-    "**/package-lock.json",
-    "**/yarn.lock",
-    "**/go.sum"
+    "README.md",
+    "LICENSE",
+    "package-lock.json",
+    "yarn.lock",
+    "go.sum"
   ]
   regexes = [
     "AKIAIOSFODNN7EXAMPLE",
