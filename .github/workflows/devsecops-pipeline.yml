@@ -10,9 +10,9 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  # ============================================
+  #============================================
   # 1. SECRET SCANNING - GitLeaks
-  # ============================================
+  #============================================
   gitleaks:
     name: 🔑 Secret Scanning (GitLeaks)
     runs-on: ubuntu-latest
@@ -36,9 +36,9 @@ jobs:
           name: gitleaks-results
           path: results.sarif
 
-  # ============================================
+  #============================================
   # 2. SAST - SonarQube
-  # ============================================
+  #============================================
   sast:
     name: 🔍 SAST Analysis (SonarQube)
     runs-on: ubuntu-latest
@@ -90,9 +90,9 @@ jobs:
           name: sonarqube-results
           path: backend/target/sonar/
 
-  # ============================================
+  #============================================
   # 3. SCA - OWASP Dependency Check
-  # ============================================
+  #============================================
   sca:
     name: 📦 Dependency Check (OWASP SCA)
     runs-on: ubuntu-latest
@@ -128,9 +128,9 @@ jobs:
           name: owasp-dependency-check-report
           path: backend/target/owasp-reports/
 
-  # ============================================
+  #============================================
   # 4. CONTAINER SECURITY - Trivy
-  # ============================================
+  #============================================
   trivy:
     name: 🐳 Container Scan (Trivy)
     runs-on: ubuntu-latest
@@ -157,9 +157,9 @@ jobs:
           name: trivy-results
           path: trivy-results.txt
 
-  # ============================================
+  #============================================
   # 5. IAC SECURITY - Checkov
-  # ============================================
+  #============================================
   checkov:
     name: 🏗️ IaC Security (Checkov)
     runs-on: ubuntu-latest
@@ -184,9 +184,9 @@ jobs:
           name: checkov-results
           path: results.sarif
 
-  # ============================================
+  #============================================
   # 6. DAST - OWASP ZAP
-  # ============================================
+  #============================================
   dast:
     name: 🌐 DAST Scan (OWASP ZAP)
     runs-on: ubuntu-latest
@@ -243,9 +243,9 @@ jobs:
           name: spring-boot-logs
           path: backend/spring-boot.log
 
-  # ============================================
+  #============================================
   # 7. FINAL STATUS - Summary
-  # ============================================
+  #============================================
   summary:
     name: 📊 Security Pipeline Summary
     runs-on: ubuntu-latest
