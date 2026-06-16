@@ -22,30 +22,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Gitleaks
+      - name: Show application.properties content
         run: |
-          wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz
-          tar -xzf gitleaks_8.24.3_linux_x64.tar.gz
-          chmod +x gitleaks
-          sudo mv gitleaks /usr/local/bin/
-
-      - name: Show files to scan
-        run: |
-          echo "📁 Fichiers à scanner :"
-          find . -name "*.properties" -o -name "*.yml" -o -name "*.yaml" -o -name "*.json" -o -name "*.java"
-          echo ""
           echo "📄 Contenu de application.properties :"
-          cat backend/src/main/resources/application.properties 2>/dev/null || echo "Fichier non trouvé"
+          cat backend/src/main/resources/application.properties || echo "Fichier non trouvé"
 
-      - name: Run GitLeaks
-        run: |
-          gitleaks detect \
-            --source . \
-            --config .gitleaks.toml \
-            --verbose \
-            --exit-code 1 \
-            --report-format sarif \
-            --report-path results.sarif
+      - name: Run GitLeaks with custom config
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          args: --verbose
 
       - name: Upload GitLeaks results
         if: always()

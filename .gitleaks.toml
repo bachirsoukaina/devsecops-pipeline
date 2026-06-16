@@ -4,33 +4,77 @@ title = "DevSecOps Pipeline - Gitleaks Configuration"
 useDefault = true
 
 # ============================================
-# RÈGLES SPÉCIFIQUES POUR application.properties
+# RÈGLES POUR application.properties
 # ============================================
 
-# Règle 1: JWT Secret
+# Règle 1: JWT Secret dans application.properties
 [[rules]]
-  id = "jwt-secret-hardcoded"
-  description = "JWT Secret hardcoded in application.properties"
+  id = "jwt-secret-properties"
+  description = "JWT Secret in application.properties"
   regex = '''jwt\.secret\s*=\s*[a-zA-Z0-9]+'''
   tags = ["jwt", "secret", "hardcoded"]
 
-# Règle 2: AWS Access Key
+# Règle 2: AWS Access Key dans properties
 [[rules]]
-  id = "aws-access-key-hardcoded"
-  description = "AWS Access Key hardcoded"
-  regex = '''AKIA[0-9A-Z]{16}'''
+  id = "aws-access-key-properties"
+  description = "AWS Access Key in properties"
+  regex = '''aws\.access\.key\s*=\s*AKIA[0-9A-Z]{16}'''
   tags = ["aws", "secret", "hardcoded"]
 
-# Règle 3: AWS Secret Key
+# Règle 3: AWS Secret Key dans properties
 [[rules]]
-  id = "aws-secret-key-hardcoded"
-  description = "AWS Secret Key hardcoded"
-  regex = '''[A-Za-z0-9/+=]{40}'''
+  id = "aws-secret-key-properties"
+  description = "AWS Secret Key in properties"
+  regex = '''aws\.secret\.key\s*=\s*[A-Za-z0-9/+=]{40}'''
   tags = ["aws", "secret", "hardcoded"]
 
-# Règle 4: Generic Secret
+# Règle 4: Generic secret in properties
 [[rules]]
-  id = "generic-secret"
+  id = "generic-secret-properties"
   description = "Generic secret in properties files"
   regex = '''(secret|key|token|password)\s*=\s*[a-zA-Z0-9!@#$%^&*()_]+'''
   tags = ["secret", "hardcoded"]
+
+# ============================================
+# RÈGLES POUR LE CODE JAVA
+# ============================================
+
+# Règle 5: AWS Access Key dans Java
+[[rules]]
+  id = "aws-access-key-java"
+  description = "AWS Access Key in Java code"
+  regex = '''AKIA[0-9A-Z]{16}'''
+  tags = ["aws", "secret", "hardcoded"]
+
+# Règle 6: AWS Secret Key dans Java
+[[rules]]
+  id = "aws-secret-key-java"
+  description = "AWS Secret Key in Java code"
+  regex = '''[A-Za-z0-9/+=]{40}'''
+  tags = ["aws", "secret", "hardcoded"]
+
+# Règle 7: GitHub Token
+[[rules]]
+  id = "github-token"
+  description = "GitHub Personal Access Token"
+  regex = '''ghp_[a-zA-Z0-9]{36}'''
+  tags = ["github", "token", "hardcoded"]
+
+# ============================================
+# ALLOWLIST - Ignorer les faux positifs
+# ============================================
+[allowlist]
+  description = "Ignore false positives"
+  paths = [
+    "**/*.md",
+    "**/*.txt",
+    "**/README.md",
+    "**/LICENSE",
+    "**/package-lock.json",
+    "**/yarn.lock",
+    "**/go.sum"
+  ]
+  regexes = [
+    "AKIAIOSFODNN7EXAMPLE",
+    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+  ]
