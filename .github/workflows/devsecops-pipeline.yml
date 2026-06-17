@@ -111,6 +111,7 @@ jobs:
             -Dsonar.java.binaries=target/classes \
             -DskipTests
         working-directory: backend
+        continue-on-error: false
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
