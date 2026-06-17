@@ -101,7 +101,7 @@ jobs:
           path: backend/target/sonar/
 
   # ============================================
-  # 3. SCA - OWASP Dependency Check (CORRIGÉ)
+  # 3. SCA - OWASP Dependency Check
   # ============================================
   sca:
     name: 📦 Dependency Check (OWASP SCA)
@@ -206,7 +206,7 @@ jobs:
           path: results.sarif
 
   # ============================================
-  # 6. DAST - OWASP ZAP (CORRIGÉ)
+  # 6. DAST - OWASP ZAP
   # ============================================
   dast:
     name: 🌐 DAST Scan (OWASP ZAP)
@@ -236,13 +236,18 @@ jobs:
           nohup mvn spring-boot:run > spring-boot.log 2>&1 &
           echo "⏳ Waiting for Spring Boot to start..."
           for i in {1..60}; do
-            if curl -s http://localhost:8080/actuator/health > /dev/null; then
+            if curl -s http://localhost:8080/api/users > /dev/null 2>&1; then
               echo "✅ Spring Boot started successfully!"
               break
             fi
             echo "⏳ Waiting... ($i/60)"
             sleep 2
           done
+
+      - name: Test XSS Endpoint
+        run: |
+          echo "🔍 Testing XSS endpoint..."
+          curl -s "http://localhost:8080/api/users/search?query=<script>alert('XSS')</script>" || echo "Endpoint not found"
 
       - name: Run OWASP ZAP Baseline Scan
         uses: zaproxy/action-baseline@v0.12.0
@@ -317,18 +322,5 @@ jobs:
 
           echo ""
           echo "================================="
-
-          # Vérifier si tous ont réussi
-          if [ "${{ needs.gitleaks.result }}" == "success" ] && \
-             [ "${{ needs.sast.result }}" == "success" ] && \
-             [ "${{ needs.sca.result }}" == "success" ] && \
-             [ "${{ needs.trivy.result }}" == "success" ] && \
-             [ "${{ needs.checkov.result }}" == "success" ] && \
-             [ "${{ needs.dast.result }}" == "success" ]; then
-            echo "✅ All security checks PASSED - Pipeline can proceed"
-            exit 0
-          else
-            echo "❌ Security checks FAILED - Pipeline blocked"
-            echo "🚫 Deployment blocked due to security violations"
-            exit 1
-          fi
+          echo "🚫 Deployment blocked due to security violations"
+          exit 1
