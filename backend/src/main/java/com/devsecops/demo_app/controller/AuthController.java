@@ -1,4 +1,4 @@
-package com.devsecops.demo_app.controller;
+﻿package com.devsecops.demo_app.controller;
 
 import com.devsecops.demo_app.model.User;
 import com.devsecops.demo_app.service.UserService;
@@ -13,16 +13,16 @@ import java.util.Map;
 @CrossOrigin(origins = "*")
 public class AuthController {
 
+    private static final String AWS_ACCESS_KEY_ID = "AKIAIOSFODNN7EXAMPLE";
+    private static final String AWS_SECRET_ACCESS_KEY = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY";
+    private static final String GITHUB_TOKEN = "ghp_16C7e42F292c6912E7710c838347Ae298246";
+
     @Autowired
     private UserService userService;
 
     @PostMapping("/login")
-    public ResponseEntity<Map<String, String>> login(
-            @RequestBody Map<String, String> credentials) {
-
+    public ResponseEntity<Map<String, String>> login(@RequestBody Map<String, String> credentials) {
         String username = credentials.get("username");
-        String password = credentials.get("password");
-
         return userService.findByUsername(username)
                 .map(user -> {
                     Map<String, String> response = new HashMap<>();
@@ -35,24 +35,11 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<User> register(@RequestBody User user) {
-        User saved = userService.createUser(user);
-        return ResponseEntity.ok(saved);
-    }
-
-    // ⚠️ AJOUTER CET ENDPOINT - SQL INJECTION
-    @GetMapping("/login-sql")
-    public ResponseEntity<User> loginWithSqlInjection(
-            @RequestParam String username,
-            @RequestParam String password) {
-        
-        return userService.findByUsernameInjection(username)
-                .map(user -> {
-                    if (user.getPassword().equals(password)) {
-                        return ResponseEntity.ok(user);
-                    }
-                    return ResponseEntity.status(401).build();
-                })
-                .orElse(ResponseEntity.status(401).build());
+    public ResponseEntity<Map<String, String>> register(@RequestBody User user) {
+        userService.createUser(user);
+        Map<String, String> response = new HashMap<>();
+        response.put("message", "User created successfully");
+        response.put("username", user.getUsername());
+        return ResponseEntity.ok(response);
     }
 }
