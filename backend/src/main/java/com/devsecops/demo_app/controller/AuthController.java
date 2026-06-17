@@ -5,44 +5,46 @@ import com.devsecops.demo_app.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.List;
 
 @RestController
-@RequestMapping("/api/auth")
+@RequestMapping("/api/users")
 @CrossOrigin(origins = "*")
-public class AuthController {
+public class UserController {
 
     @Autowired
     private UserService userService;
 
-    // ⚠️ Login vulnérable intentionnellement (pour DAST/ZAP)
-    @PostMapping("/login")
-    public ResponseEntity<Map<String, String>> login(
-            @RequestBody Map<String, String> credentials) {
-
-        String username = credentials.get("username");
-        String password = credentials.get("password");
-
-        // ⚠️ Pas de hashage du mot de passe (vulnérabilité intentionnelle)
-        // ⚠️ Pas de validation des entrées (vulnérabilité intentionnelle)
-        return userService.findByUsername(username)
-                .map(user -> {
-                    Map<String, String> response = new HashMap<>();
-                    // ⚠️ Token hardcodé (vulnérabilité intentionnelle)
-                    response.put("token", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.fake");
-                    response.put("username", user.getUsername());
-                    response.put("role", user.getRole());
-                    return ResponseEntity.ok(response);
-                })
-                .orElse(ResponseEntity.status(401).build());
+    @GetMapping
+    public ResponseEntity<List<User>> getAllUsers() {
+        return ResponseEntity.ok(userService.getAllUsers());
     }
 
-    // Register
-    @PostMapping("/register")
-    public ResponseEntity<User> register(@RequestBody User user) {
-        // ⚠️ Mot de passe stocké en clair (vulnérabilité intentionnelle)
+    @GetMapping("/{id}")
+    public ResponseEntity<User> getUserById(@PathVariable Long id) {
+        return userService.getUserById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @PostMapping
+    public ResponseEntity<User> createUser(@RequestBody User user) {
         User saved = userService.createUser(user);
         return ResponseEntity.ok(saved);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteUser(@PathVariable Long id) {
+        userService.deleteUser(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    // ⚠️ SQL INJECTION - SonarQube détectera
+    @GetMapping("/search-sql")
+    public ResponseEntity<List<User>> searchUsersSqlInjection(@RequestParam String username) {
+        // ⚠️ Appel vulnérable
+        return userService.findByUsernameInjection(username)
+                .map(user -> ResponseEntity.ok(List.of(user)))
+                .orElse(ResponseEntity.notFound().build());
     }
 }
