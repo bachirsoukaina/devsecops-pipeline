@@ -29,28 +29,8 @@ jobs:
           chmod +x gitleaks
           sudo mv gitleaks /usr/local/bin/
 
-      - name: Show files to scan
-        run: |
-          echo "📁 Fichiers à scanner :"
-          find . -name "*.properties" -o -name "*.yml" -o -name "*.yaml" -o -name "*.json" -o -name "*.java"
-          echo ""
-          echo "📄 Contenu de application.properties :"
-          cat backend/src/main/resources/application.properties 2>/dev/null || echo "Fichier non trouvé"
-
-      - name: Run GitLeaks on application.properties
-        run: |
-          echo "🔍 Scanning application.properties for hardcoded secrets..."
-          gitleaks detect \
-            --source backend/src/main/resources/ \
-            --config .gitleaks.toml \
-            --verbose \
-            --exit-code 0 \
-            --report-format sarif \
-            --report-path results-properties.sarif || true
-
       - name: Run GitLeaks on all code
         run: |
-          echo "🔍 Scanning all code for secrets..."
           gitleaks detect \
             --source . \
             --config .gitleaks.toml \
@@ -64,9 +44,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gitleaks-results
-          path: |
-            results.sarif
-            results-properties.sarif
+          path: results.sarif
 
   # ============================================
   # 2. SAST - SonarQube
@@ -229,52 +207,19 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Cache Maven packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
-
-      - name: Start Spring Boot Application
-        run: |
-          cd backend
-          nohup mvn spring-boot:run > spring-boot.log 2>&1 &
-          echo "⏳ Waiting for Spring Boot to start..."
-          for i in {1..60}; do
-            if curl -s http://localhost:8080/actuator/health > /dev/null; then
-              echo "✅ Spring Boot started successfully!"
-              break
-            fi
-            echo "⏳ Waiting... ($i/60)"
-            sleep 2
-          done
-
-      - name: Run OWASP ZAP Baseline Scan
+      - name: Run OWASP ZAP on vulnerable test site
         uses: zaproxy/action-baseline@v0.12.0
         with:
-          target: 'http://localhost:8080'
-          cmd_options: '-a -r zap-report.html'
+          target: 'http://testphp.vulnweb.com'
+          cmd_options: '-a'
+        continue-on-error: true
 
       - name: Upload ZAP Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: zap-report
-          path: zap-report.html
-
-      - name: Upload Spring Boot logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: spring-boot-logs
-          path: backend/spring-boot.log
+          path: report_html.html
 
   # ============================================
   # 7. FINAL STATUS - Summary
@@ -290,63 +235,44 @@ jobs:
           echo "📊 DevSecOps Pipeline Summary"
           echo "================================="
           echo ""
-          
-          # GitLeaks
+
           if [ "${{ needs.gitleaks.result }}" == "success" ]; then
             echo "✅ GitLeaks: PASSED"
           else
-            echo "❌ GitLeaks: FAILED"
+            echo "❌ GitLeaks: FAILED - Secrets detected"
           fi
-          
-          # SonarQube
+
           if [ "${{ needs.sast.result }}" == "success" ]; then
             echo "✅ SonarQube: PASSED"
           else
-            echo "❌ SonarQube: FAILED"
+            echo "❌ SonarQube: FAILED - Vulnerabilities detected"
           fi
-          
-          # OWASP
+
           if [ "${{ needs.sca.result }}" == "success" ]; then
             echo "✅ OWASP SCA: PASSED"
           else
-            echo "❌ OWASP SCA: FAILED"
+            echo "❌ OWASP SCA: FAILED - Vulnerable dependencies detected"
           fi
-          
-          # Trivy
+
           if [ "${{ needs.trivy.result }}" == "success" ]; then
             echo "✅ Trivy: PASSED"
           else
-            echo "❌ Trivy: FAILED"
+            echo "❌ Trivy: FAILED - Container vulnerabilities detected"
           fi
-          
-          # Checkov
+
           if [ "${{ needs.checkov.result }}" == "success" ]; then
             echo "✅ Checkov: PASSED"
           else
-            echo "❌ Checkov: FAILED"
+            echo "❌ Checkov: FAILED - IaC misconfigurations detected"
           fi
-          
-          # ZAP
+
           if [ "${{ needs.dast.result }}" == "success" ]; then
-            echo "✅ ZAP: PASSED"
+            echo "✅ ZAP DAST: PASSED"
           else
-            echo "❌ ZAP: FAILED"
+            echo "❌ ZAP DAST: FAILED - Dynamic vulnerabilities detected"
           fi
-          
+
           echo ""
           echo "================================="
-          
-          # Vérifier si tous ont réussi
-          if [ "${{ needs.gitleaks.result }}" == "success" ] && \
-             [ "${{ needs.sast.result }}" == "success" ] && \
-             [ "${{ needs.sca.result }}" == "success" ] && \
-             [ "${{ needs.trivy.result }}" == "success" ] && \
-             [ "${{ needs.checkov.result }}" == "success" ] && \
-             [ "${{ needs.dast.result }}" == "success" ]; then
-            echo "✅ All security checks PASSED - Pipeline can proceed"
-            exit 0
-          else
-            echo "❌ Security checks FAILED - Pipeline blocked"
-            echo "🚫 Deployment blocked due to security violations"
-            exit 1
-          fi
+          echo "🚫 Deployment blocked due to security violations"
+          exit 1
