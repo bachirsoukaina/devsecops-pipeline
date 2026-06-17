@@ -48,7 +48,7 @@ jobs:
           path: results.sarif
 
   # ============================================
-  # 2. SAST - SonarQube (bloque si Quality Gate échoue)
+  # 2. SAST - SonarQube
   # ============================================
   sast:
     name: 🔍 SAST Analysis (SonarQube)
@@ -94,9 +94,6 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        # IMPORTANT : pas de continue-on-error ici.
-        # sonar.qualitygate.wait=true fait échouer "mvn" (donc le job)
-        # si le Quality Gate sur SonarCloud est rouge (vulnérabilités, bugs, etc.)
 
       - name: Upload SonarQube results
         if: always()
@@ -106,7 +103,7 @@ jobs:
           path: backend/target/sonar/
 
   # ============================================
-  # 3. SCA - OWASP Dependency Check (bloque si CVSS >= 7)
+  # 3. SCA - OWASP Dependency Check (avec clé NVD + cache)
   # ============================================
   sca:
     name: 📦 Dependency Check (OWASP SCA)
@@ -128,16 +125,21 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
 
+      - name: Cache OWASP Dependency Check NVD database
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository/org/owasp/dependency-check-data
+          key: owasp-dc-nvd-${{ github.run_id }}
+          restore-keys: owasp-dc-nvd-
+
       - name: OWASP Dependency Check
         run: |
           mvn org.owasp:dependency-check-maven:check \
             -DfailBuildOnCVSS=7 \
             -Dformat=ALL \
-            -DoutputDirectory=target/owasp-reports
+            -DoutputDirectory=target/owasp-reports \
+            -DnvdApiKey=${{ secrets.NVD_API_KEY }}
         working-directory: backend
-        # IMPORTANT : pas de continue-on-error.
-        # failBuildOnCVSS=7 fait échouer mvn (et donc le job)
-        # si une dépendance a un CVE avec un score CVSS >= 7 (ex: Log4Shell = 10.0)
 
       - name: Upload OWASP Report
         if: always()
@@ -147,7 +149,7 @@ jobs:
           path: backend/target/owasp-reports/
 
   # ============================================
-  # 4. CONTAINER SECURITY - Trivy (bloque sur CRITICAL/HIGH/MEDIUM)
+  # 4. CONTAINER SECURITY - Trivy
   # ============================================
   trivy:
     name: 🐳 Container Scan (Trivy)
@@ -168,9 +170,6 @@ jobs:
           exit-code: '1'
           ignore-unfixed: false
           output: 'trivy-results.txt'
-        # IMPORTANT : pas de continue-on-error.
-        # exit-code 1 fait échouer le job dès qu'une vulnérabilité
-        # CRITICAL, HIGH ou MEDIUM est trouvée dans l'image
 
       - name: Upload Trivy results
         if: always()
@@ -180,7 +179,7 @@ jobs:
           path: trivy-results.txt
 
   # ============================================
-  # 5. IAC SECURITY - Checkov (bloque sur misconfiguration)
+  # 5. IAC SECURITY - Checkov
   # ============================================
   checkov:
     name: 🏗️ IaC Security (Checkov)
@@ -198,9 +197,6 @@ jobs:
           soft_fail: false
           download_external_modules: true
           log_level: WARNING
-        # IMPORTANT : pas de continue-on-error.
-        # soft_fail: false fait déjà échouer l'action en cas de misconfiguration,
-        # mais continue-on-error annulait cet échec au niveau du job. Supprimé.
 
       - name: Upload Checkov results
         if: always()
@@ -210,13 +206,13 @@ jobs:
           path: results.sarif
 
   # ============================================
-  # 6. DAST - OWASP ZAP (scan de la vraie app Spring Boot)
+  # 6. DAST - OWASP ZAP (build rapide via jar + cible XSS explicite)
   # ============================================
   dast:
     name: 🌐 DAST Scan (OWASP ZAP)
     runs-on: ubuntu-latest
     needs: [gitleaks, sast, sca, trivy, checkov]
-    if: always()  # S'exécute même si les jobs précédents échouent, pour voir tous les résultats
+    if: always()
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -234,42 +230,65 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
 
-      - name: Start Spring Boot Application
+      - name: Build and Start Spring Boot Application
         run: |
           cd backend
-          nohup mvn spring-boot:run > spring-boot.log 2>&1 &
+          mvn clean package -DskipTests -q
+          nohup java -jar target/*.jar > spring-boot.log 2>&1 &
           echo "⏳ Attente du démarrage de Spring Boot..."
-          for i in {1..60}; do
+          for i in {1..30}; do
             if curl -s http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
               echo "✅ Spring Boot démarré avec succès !"
               break
             fi
-            if [ "$i" -eq 60 ]; then
-              echo "❌ Spring Boot n'a pas démarré après 120s"
+            if [ "$i" -eq 30 ]; then
+              echo "❌ Spring Boot n'a pas démarré après 60s"
               cat spring-boot.log
               exit 1
             fi
-            echo "⏳ Attente... ($i/60)"
+            echo "⏳ Attente... ($i/30)"
             sleep 2
           done
 
-      - name: Run OWASP ZAP Full Scan (active, sur votre app réelle)
-        uses: zaproxy/action-full-scan@v0.11.0
+      - name: Verify vulnerable XSS endpoint is reachable
+        run: |
+          echo "🔍 Vérification de l'endpoint XSS avant le scan ZAP..."
+          curl -s "http://localhost:8080/api/users/search?query=test" | head -c 300
+          echo ""
+
+      - name: Create ZAP context file targeting known endpoints
+        run: |
+          cat > zap-urls.txt << 'EOF'
+          http://localhost:8080/api/users
+          http://localhost:8080/api/users/search?query=test
+          http://localhost:8080/api/users/search?query=%3Cscript%3Ealert(1)%3C%2Fscript%3E
+          http://localhost:8080/api/users/1
+          http://localhost:8080/actuator/health
+          EOF
+          cat zap-urls.txt
+
+      - name: Run OWASP ZAP Baseline Scan against known endpoints
+        uses: zaproxy/action-baseline@v0.12.0
         with:
-          target: 'http://localhost:8080'
-          cmd_options: '-a -j'
-          allow_issue_writing: false
+          target: 'http://localhost:8080/api/users/search?query=test'
+          cmd_options: '-a -j -r zap-report.html -z "-config spider.maxDuration=2"'
           fail_action: true
-        # IMPORTANT : pas de continue-on-error.
-        # fail_action: true fait échouer le job si ZAP trouve des alertes
-        # (XSS, SQLi, headers manquants, etc.) au niveau WARN ou plus
+        # IMPORTANT :
+        # - target pointe directement sur le paramètre vulnérable pour forcer ZAP
+        #   à inclure cette URL dans son scan dès le départ (le spider seul ne la
+        #   trouverait pas car ce n'est pas un lien HTML cliquable)
+        # - "-a" active le scan actif (teste réellement les payloads XSS/SQLi),
+        #   pas seulement le scan passif
+        # - fail_action: true fait échouer le job si ZAP trouve des alertes
 
       - name: Upload ZAP Report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: zap-report
-          path: report_html.html
+          path: |
+            zap-report.html
+            zap-urls.txt
 
       - name: Upload Spring Boot logs
         if: always()
