@@ -1,4 +1,4 @@
-﻿package com.devsecops.demo_app.controller;
+package com.devsecops.demo_app.controller;
 
 import com.devsecops.demo_app.model.User;
 import com.devsecops.demo_app.service.UserService;
