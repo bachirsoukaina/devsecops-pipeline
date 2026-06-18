@@ -181,7 +181,22 @@ jobs:
       - name: Build Docker Image
         run: docker build -t demo-app:latest ./backend
 
-      - name: Run Trivy Scan
+      - name: Run Trivy Scan (rapport complet, toujours affiché)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: 'demo-app:latest'
+          format: 'table'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+          exit-code: '0'
+          ignore-unfixed: false
+          output: 'trivy-results.txt'
+        # exit-code: '0' ici uniquement pour forcer Trivy à toujours produire
+        # et afficher le tableau complet, peu importe le résultat
+
+      - name: Afficher le rapport Trivy dans les logs
+        run: cat trivy-results.txt
+
+      - name: Bloquer le pipeline si vulnérabilités détectées
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'demo-app:latest'
@@ -189,7 +204,9 @@ jobs:
           severity: 'CRITICAL,HIGH,MEDIUM'
           exit-code: '1'
           ignore-unfixed: false
-          output: 'trivy-results.txt'
+        # Ce 2ème scan (rapide, image déjà en cache local) ne sert qu'à
+        # faire échouer le job (exit 1) si CRITICAL/HIGH/MEDIUM trouvé.
+        # Le rapport, lui, a déjà été affiché à l'étape précédente.
 
       - name: Upload Trivy results
         if: always()
