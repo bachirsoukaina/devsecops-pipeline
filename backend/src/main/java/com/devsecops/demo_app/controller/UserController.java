@@ -29,7 +29,8 @@ public class UserController {
 
     @PostMapping
     public ResponseEntity<User> createUser(@RequestBody User user) {
-        return ResponseEntity.ok(userService.createUser(user));
+        User saved = userService.createUser(user);
+        return ResponseEntity.ok(saved);
     }
 
     @DeleteMapping("/{id}")
@@ -38,9 +39,13 @@ public class UserController {
         return ResponseEntity.noContent().build();
     }
 
-    // XSS intentionnel pour OWASP ZAP
-    @GetMapping("/search")
+    // ⚠️ ENDPOINT XSS VOLONTAIRE - ZAP DÉTECTERA
+    @GetMapping(value = "/search", produces = "text/html;charset=UTF-8")
     public ResponseEntity<String> searchUsers(@RequestParam String query) {
-        return ResponseEntity.ok("<html><body>Resultats pour : " + query + "</body></html>");
+        // ⚠️ XSS Réfléchi volontaire - pas d'échappement + Content-Type HTML
+        String response = "<html><body><h1>Resultats pour : " + query + "</h1></body></html>";
+        return ResponseEntity.ok()
+                .header("Content-Type", "text/html; charset=UTF-8")
+                .body(response);
     }
 }
