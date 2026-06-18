@@ -1,4 +1,4 @@
-name: Test ZAP Only
+﻿name: Test ZAP Only
 
 on:
   push:
@@ -46,21 +46,90 @@ jobs:
             sleep 2
           done
 
-      - name: Vérifier endpoint XSS
+      - name: Verify XSS endpoint
         run: |
-          echo "=== Test endpoint XSS ==="
-          curl -v "http://localhost:8080/api/users/search?query=<script>alert(1)</script>"
-          echo ""
-          echo "=== Tous les endpoints disponibles ==="
-          curl -s http://localhost:8080/api/users | head -c 500
+          echo "=== Test Content-Type ==="
+          curl -I "http://localhost:8080/api/users/search?query=test"
+          echo "=== Test XSS payload ==="
+          curl -s "http://localhost:8080/api/users/search?query=<script>alert(1)</script>"
 
-      - name: Run OWASP ZAP Baseline Scan
-        uses: zaproxy/action-full-scan@v0.11.0
-        with:
-          target: 'http://localhost:8080/api/users/search?query=test'
-          cmd_options: '-a -j'
-          fail_action: true
-        continue-on-error: true
+      - name: Install ZAP
+        run: |
+          wget -q https://github.com/zaproxy/zaproxy/releases/download/v2.15.0/ZAP_2.15.0_Linux.tar.gz
+          tar -xzf ZAP_2.15.0_Linux.tar.gz
+          sudo mv ZAP_2.15.0 /opt/zap
+          echo "✅ ZAP installé"
+
+      - name: Start ZAP daemon
+        run: |
+          /opt/zap/zap.sh -daemon -port 8090 \
+            -config api.disablekey=true \
+            -config api.addrs.addr.name=.* \
+            -config api.addrs.addr.regex=true > zap-daemon.log 2>&1 &
+          echo "⏳ Attente démarrage ZAP..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8090/JSON/core/view/version/ | grep -q "version"; then
+              echo "✅ ZAP daemon UP !"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "❌ ZAP timeout"
+              cat zap-daemon.log
+              exit 1
+            fi
+            echo "⏳ ($i/30)"
+            sleep 3
+          done
+
+      - name: ZAP Spider
+        run: |
+          echo "🕷️ Spider sur l'endpoint XSS..."
+          curl -s "http://localhost:8090/JSON/spider/action/scan/?url=http://localhost:8080/api/users/search%3Fquery%3Dtest&recurse=true&maxChildren=10"
+          sleep 10
+
+      - name: ZAP Active Scan
+        run: |
+          echo "⚔️ Scan actif sur l'endpoint XSS..."
+          SCAN_ID=$(curl -s "http://localhost:8090/JSON/ascan/action/scan/?url=http://localhost:8080/api/users/search%3Fquery%3Dtest&recurse=true" | python3 -c "import sys,json; print(json.load(sys.stdin).get('scan','0'))")
+          echo "Scan ID: $SCAN_ID"
+          for i in {1..30}; do
+            STATUS=$(curl -s "http://localhost:8090/JSON/ascan/view/status/?scanId=$SCAN_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','0'))")
+            echo "⏳ Progression scan actif: $STATUS%"
+            if [ "$STATUS" = "100" ]; then
+              echo "✅ Scan actif terminé"
+              break
+            fi
+            sleep 10
+          done
+
+      - name: Generate ZAP Report
+        run: |
+          curl -s "http://localhost:8090/OTHER/core/other/htmlreport/" > zap-report.html
+          echo "📊 Alertes détectées:"
+          curl -s "http://localhost:8090/JSON/alert/view/alertsSummary/" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          alerts = d.get('alertsSummary', {})
+          for k,v in alerts.items():
+              if int(v) > 0:
+                  print(f'  {k}: {v}')
+          "
+
+      - name: Check for High alerts and fail if XSS detected
+        run: |
+          HIGH=$(curl -s "http://localhost:8090/JSON/alert/view/alertsByRisk/?riskId=3" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          alerts = d.get('alertsByRisk', [])
+          print(len(alerts))
+          " 2>/dev/null || echo "0")
+          echo "Alertes High: $HIGH"
+          if [ "$HIGH" -gt 0 ]; then
+            echo "❌ ZAP a détecté $HIGH alerte(s) High (XSS ou autre) - Pipeline bloqué"
+            exit 1
+          else
+            echo "✅ Aucune alerte High détectée"
+          fi
 
       - name: Upload ZAP Report
         if: always()
@@ -68,8 +137,8 @@ jobs:
         with:
           name: zap-report-test
           path: |
-            report_html.html
-            report_json.json
+            zap-report.html
+            zap-daemon.log
 
       - name: Upload Spring Boot logs
         if: always()
