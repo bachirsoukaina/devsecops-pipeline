@@ -1,0 +1,79 @@
+name: Test ZAP Only
+
+on:
+  push:
+    branches: [ test-security-pipeline ]
+  workflow_dispatch:
+
+jobs:
+  dast:
+    name: 🌐 DAST Scan (OWASP ZAP)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2
+          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
+          restore-keys: ${{ runner.os }}-m2
+
+      - name: Build and Start Spring Boot
+        run: |
+          cd backend
+          mvn clean package -DskipTests -q
+          nohup java -jar target/*.jar > spring-boot.log 2>&1 &
+          echo "⏳ Attente démarrage Spring Boot..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
+              echo "✅ Spring Boot UP !"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then
+              echo "❌ Timeout"
+              cat spring-boot.log
+              exit 1
+            fi
+            echo "⏳ ($i/30)"
+            sleep 2
+          done
+
+      - name: Vérifier endpoint XSS
+        run: |
+          echo "=== Test endpoint XSS ==="
+          curl -v "http://localhost:8080/api/users/search?query=<script>alert(1)</script>"
+          echo ""
+          echo "=== Tous les endpoints disponibles ==="
+          curl -s http://localhost:8080/api/users | head -c 500
+
+      - name: Run OWASP ZAP Baseline Scan
+        uses: zaproxy/action-baseline@v0.12.0
+        with:
+          target: 'http://localhost:8080/api/users/search?query=test'
+          cmd_options: '-a -j'
+          fail_action: true
+        continue-on-error: true
+
+      - name: Upload ZAP Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: zap-report-test
+          path: |
+            report_html.html
+            report_json.json
+
+      - name: Upload Spring Boot logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spring-boot-logs
+          path: backend/spring-boot.log
