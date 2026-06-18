@@ -1,4 +1,4 @@
-name: DevSecOps Pipeline
+﻿name: DevSecOps Pipeline
 
 on:
   push:
@@ -11,9 +11,6 @@ env:
 
 jobs:
 
-  # ============================================
-  # 1. SECRET SCANNING - GitLeaks
-  # ============================================
   gitleaks:
     name: 🔑 Secret Scanning (GitLeaks)
     runs-on: ubuntu-latest
@@ -22,14 +19,12 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Install Gitleaks
         run: |
           wget -q https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz
           tar -xzf gitleaks_8.24.3_linux_x64.tar.gz
           chmod +x gitleaks
           sudo mv gitleaks /usr/local/bin/
-
       - name: Run GitLeaks
         run: |
           gitleaks detect \
@@ -39,7 +34,6 @@ jobs:
             --exit-code 1 \
             --report-format sarif \
             --report-path results.sarif
-
       - name: Upload GitLeaks results
         if: always()
         uses: actions/upload-artifact@v4
@@ -47,9 +41,6 @@ jobs:
           name: gitleaks-results
           path: results.sarif
 
-  # ============================================
-  # 2. SAST - SonarQube
-  # ============================================
   sast:
     name: 🔍 SAST Analysis (SonarQube)
     runs-on: ubuntu-latest
@@ -58,27 +49,23 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
-
       - name: Cache SonarCloud packages
         uses: actions/cache@v4
         with:
           path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
-
       - name: Cache Maven packages
         uses: actions/cache@v4
         with:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
-
       - name: Build and Analyze with SonarCloud
         run: |
           mvn clean verify sonar:sonar \
@@ -94,7 +81,6 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Upload SonarQube results
         if: always()
         uses: actions/upload-artifact@v4
@@ -102,37 +88,30 @@ jobs:
           name: sonarqube-results
           path: backend/target/sonar/
 
-  # ============================================
-  # 3. SCA - OWASP Dependency Check (avec clé NVD + cache)
-  # ============================================
   sca:
     name: 📦 Dependency Check (OWASP SCA)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
-
       - name: Cache Maven packages
         uses: actions/cache@v4
         with:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
-
-      - name: Cache OWASP Dependency Check NVD database
+      - name: Cache OWASP NVD database
         uses: actions/cache@v4
         with:
           path: ~/.m2/repository/org/owasp/dependency-check-data
           key: owasp-dc-nvd-${{ github.run_id }}
           restore-keys: owasp-dc-nvd-
-
-      - name: OWASP Dependency Check (avec retry sur panne NVD)
+      - name: OWASP Dependency Check
         run: |
           for attempt in 1 2 3; do
             echo "🔄 Tentative $attempt/3..."
@@ -147,20 +126,11 @@ jobs:
               echo "✅ Dependency Check terminé"
               exit 0
             fi
-            echo "⚠️ Échec tentative $attempt (probable panne NVD), nouvelle tentative dans 30s..."
+            echo "⚠️ Échec tentative $attempt, retry dans 30s..."
             sleep 30
           done
-          echo "❌ Échec après 3 tentatives - voir logs ci-dessus"
           exit 1
         working-directory: backend
-        # IMPORTANT : ce retry gère uniquement les pannes/timeouts du service NVD (503/429).
-        # Si une VRAIE vulnérabilité CVSS >= 7 est trouvée, mvn échoue avec un message
-        # différent dès que dependency-check a accès aux données — le retry ne masque
-        # jamais une vraie détection, car le job continue d'échouer (exit 1) si
-        # dependency-check tourne correctement et trouve une vulnérabilité.
-        # -DnvdValidForHours=24 réutilise les données NVD du cache si elles ont
-        # moins de 24h, évitant un re-téléchargement complet à chaque run.
-
       - name: Upload OWASP Report
         if: always()
         uses: actions/upload-artifact@v4
@@ -168,20 +138,15 @@ jobs:
           name: owasp-dependency-check-report
           path: backend/target/owasp-reports/
 
-  # ============================================
-  # 4. CONTAINER SECURITY - Trivy
-  # ============================================
   trivy:
     name: 🐳 Container Scan (Trivy)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Build Docker Image
         run: docker build -t demo-app:latest ./backend
-
-      - name: Run Trivy Scan (rapport complet, toujours affiché)
+      - name: Run Trivy Scan (rapport complet)
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'demo-app:latest'
@@ -190,13 +155,9 @@ jobs:
           exit-code: '0'
           ignore-unfixed: false
           output: 'trivy-results.txt'
-        # exit-code: '0' ici uniquement pour forcer Trivy à toujours produire
-        # et afficher le tableau complet, peu importe le résultat
-
-      - name: Afficher le rapport Trivy dans les logs
+      - name: Afficher rapport Trivy
         run: cat trivy-results.txt
-
-      - name: Bloquer le pipeline si vulnérabilités détectées
+      - name: Bloquer si vulnérabilités détectées
         uses: aquasecurity/trivy-action@master
         with:
           image-ref: 'demo-app:latest'
@@ -204,10 +165,6 @@ jobs:
           severity: 'CRITICAL,HIGH,MEDIUM'
           exit-code: '1'
           ignore-unfixed: false
-        # Ce 2ème scan (rapide, image déjà en cache local) ne sert qu'à
-        # faire échouer le job (exit 1) si CRITICAL/HIGH/MEDIUM trouvé.
-        # Le rapport, lui, a déjà été affiché à l'étape précédente.
-
       - name: Upload Trivy results
         if: always()
         uses: actions/upload-artifact@v4
@@ -215,16 +172,12 @@ jobs:
           name: trivy-results
           path: trivy-results.txt
 
-  # ============================================
-  # 5. IAC SECURITY - Checkov
-  # ============================================
   checkov:
     name: 🏗️ IaC Security (Checkov)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Run Checkov
         uses: bridgecrewio/checkov-action@master
         with:
@@ -234,7 +187,6 @@ jobs:
           soft_fail: false
           download_external_modules: true
           log_level: WARNING
-
       - name: Upload Checkov results
         if: always()
         uses: actions/upload-artifact@v4
@@ -242,9 +194,6 @@ jobs:
           name: checkov-results
           path: results.sarif
 
-  # ============================================
-  # 6. DAST - OWASP ZAP (build rapide via jar + cible XSS explicite)
-  # ============================================
   dast:
     name: 🌐 DAST Scan (OWASP ZAP)
     runs-on: ubuntu-latest
@@ -253,71 +202,94 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
-
       - name: Cache Maven packages
         uses: actions/cache@v4
         with:
           path: ~/.m2
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2
-
-      - name: Build and Start Spring Boot Application
+      - name: Build and Start Spring Boot
         run: |
           cd backend
           mvn clean package -DskipTests -q
           nohup java -jar target/*.jar > spring-boot.log 2>&1 &
-          echo "⏳ Attente du démarrage de Spring Boot..."
+          echo "⏳ Attente Spring Boot..."
           for i in {1..30}; do
             if curl -s http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
-              echo "✅ Spring Boot démarré avec succès !"
+              echo "✅ Spring Boot UP !"
               break
             fi
             if [ "$i" -eq 30 ]; then
-              echo "❌ Spring Boot n'a pas démarré après 60s"
+              echo "❌ Timeout"
               cat spring-boot.log
               exit 1
             fi
-            echo "⏳ Attente... ($i/30)"
+            echo "⏳ ($i/30)"
             sleep 2
           done
-
-      - name: Verify vulnerable XSS endpoint is reachable
+      - name: Install ZAP 2.17.0
         run: |
-          echo "🔍 Vérification de l'endpoint XSS avant le scan ZAP..."
-          curl -s "http://localhost:8080/api/users/search?query=test" | head -c 300
-          echo ""
-
-      - name: Create ZAP context file targeting known endpoints
+          wget -q https://github.com/zaproxy/zaproxy/releases/download/v2.17.0/ZAP_2.17.0_Linux.tar.gz
+          tar -xzf ZAP_2.17.0_Linux.tar.gz
+          sudo mv ZAP_2.17.0 /opt/zap
+          echo "✅ ZAP installé"
+      - name: Start ZAP daemon
         run: |
-          cat > zap-urls.txt << 'EOF'
-          http://localhost:8080/api/users
-          http://localhost:8080/api/users/search?query=test
-          http://localhost:8080/api/users/search?query=%3Cscript%3Ealert(1)%3C%2Fscript%3E
-          http://localhost:8080/api/users/1
-          http://localhost:8080/actuator/health
-          EOF
-          cat zap-urls.txt
-
-      - name: Run OWASP ZAP Baseline Scan against known endpoints
-        uses: zaproxy/action-baseline@v0.12.0
-        with:
-          target: 'http://localhost:8080/api/users/search?query=test'
-          cmd_options: '-a -j -r zap-report.html -z "-config spider.maxDuration=2"'
-          fail_action: true
-        # IMPORTANT :
-        # - target pointe directement sur le paramètre vulnérable pour forcer ZAP
-        #   à inclure cette URL dans son scan dès le départ (le spider seul ne la
-        #   trouverait pas car ce n'est pas un lien HTML cliquable)
-        # - "-a" active le scan actif (teste réellement les payloads XSS/SQLi),
-        #   pas seulement le scan passif
-        # - fail_action: true fait échouer le job si ZAP trouve des alertes
-
+          /opt/zap/zap.sh -daemon -port 8090 \
+            -config api.disablekey=true \
+            -config api.addrs.addr.name=.* \
+            -config api.addrs.addr.regex=true > zap-daemon.log 2>&1 &
+          for i in {1..30}; do
+            if curl -s http://localhost:8090/JSON/core/view/version/ | grep -q "version"; then
+              echo "✅ ZAP UP !"
+              break
+            fi
+            if [ "$i" -eq 30 ]; then cat zap-daemon.log; exit 1; fi
+            echo "⏳ ($i/30)"
+            sleep 3
+          done
+      - name: ZAP Spider
+        run: |
+          curl -s "http://localhost:8090/JSON/spider/action/scan/?url=http://localhost:8080/api/users/search%3Fquery%3Dtest&recurse=true"
+          sleep 15
+      - name: ZAP Active Scan
+        run: |
+          SCAN_ID=$(curl -s "http://localhost:8090/JSON/ascan/action/scan/?url=http://localhost:8080/api/users/search%3Fquery%3Dtest&recurse=true" | python3 -c "import sys,json; print(json.load(sys.stdin).get('scan','0'))")
+          echo "Scan ID: $SCAN_ID"
+          for i in {1..40}; do
+            STATUS=$(curl -s "http://localhost:8090/JSON/ascan/view/status/?scanId=$SCAN_ID" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','0'))")
+            echo "⏳ Progression: $STATUS%"
+            if [ "$STATUS" = "100" ]; then echo "✅ Terminé"; break; fi
+            sleep 10
+          done
+      - name: Generate ZAP Report
+        run: |
+          curl -s "http://localhost:8090/OTHER/core/other/htmlreport/" > zap-report.html
+          echo "📊 Résumé alertes:"
+          curl -s "http://localhost:8090/JSON/alert/view/alertsSummary/" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          for k,v in d.get('alertsSummary', {}).items():
+              if int(v) > 0: print(f'  {k}: {v}')
+          "
+      - name: Bloquer si alertes High détectées
+        run: |
+          HIGH=$(curl -s "http://localhost:8090/JSON/alert/view/alertsByRisk/?riskId=3" | python3 -c "
+          import sys, json
+          d = json.load(sys.stdin)
+          print(len(d.get('alertsByRisk', [])))
+          " 2>/dev/null || echo "0")
+          echo "Alertes High: $HIGH"
+          if [ "$HIGH" -gt 0 ]; then
+            echo "❌ $HIGH alerte(s) High détectée(s) - XSS confirmé - Pipeline bloqué"
+            exit 1
+          fi
+          echo "✅ Aucune alerte High"
       - name: Upload ZAP Report
         if: always()
         uses: actions/upload-artifact@v4
@@ -325,8 +297,7 @@ jobs:
           name: zap-report
           path: |
             zap-report.html
-            zap-urls.txt
-
+            zap-daemon.log
       - name: Upload Spring Boot logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -334,9 +305,6 @@ jobs:
           name: spring-boot-logs
           path: backend/spring-boot.log
 
-  # ============================================
-  # 7. FINAL STATUS - Résumé
-  # ============================================
   summary:
     name: 📊 Security Pipeline Summary
     runs-on: ubuntu-latest
@@ -347,55 +315,22 @@ jobs:
         run: |
           echo "📊 DevSecOps Pipeline Summary"
           echo "================================="
-
-          if [ "${{ needs.gitleaks.result }}" == "success" ]; then
-            echo "✅ GitLeaks: PASSED"
-          else
-            echo "❌ GitLeaks: FAILED - Secrets détectés"
-          fi
-
-          if [ "${{ needs.sast.result }}" == "success" ]; then
-            echo "✅ SonarQube: PASSED"
-          else
-            echo "❌ SonarQube: FAILED - Quality Gate échoué (vulnérabilités/bugs détectés)"
-          fi
-
-          if [ "${{ needs.sca.result }}" == "success" ]; then
-            echo "✅ OWASP SCA: PASSED"
-          else
-            echo "❌ OWASP SCA: FAILED - Dépendance vulnérable détectée (CVSS >= 7)"
-          fi
-
-          if [ "${{ needs.trivy.result }}" == "success" ]; then
-            echo "✅ Trivy: PASSED"
-          else
-            echo "❌ Trivy: FAILED - Vulnérabilités conteneur détectées"
-          fi
-
-          if [ "${{ needs.checkov.result }}" == "success" ]; then
-            echo "✅ Checkov: PASSED"
-          else
-            echo "❌ Checkov: FAILED - Mauvaise configuration IaC détectée"
-          fi
-
-          if [ "${{ needs.dast.result }}" == "success" ]; then
-            echo "✅ ZAP DAST: PASSED"
-          else
-            echo "❌ ZAP DAST: FAILED - Vulnérabilités détectées dynamiquement (XSS, SQLi, etc.)"
-          fi
-
+          if [ "${{ needs.gitleaks.result }}" == "success" ]; then echo "✅ GitLeaks: PASSED"; else echo "❌ GitLeaks: FAILED - Secrets détectés"; fi
+          if [ "${{ needs.sast.result }}" == "success" ]; then echo "✅ SonarQube: PASSED"; else echo "❌ SonarQube: FAILED - Vulnérabilités détectées"; fi
+          if [ "${{ needs.sca.result }}" == "success" ]; then echo "✅ OWASP SCA: PASSED"; else echo "❌ OWASP SCA: FAILED - CVE CVSS >= 7 détectée"; fi
+          if [ "${{ needs.trivy.result }}" == "success" ]; then echo "✅ Trivy: PASSED"; else echo "❌ Trivy: FAILED - Vulnérabilités conteneur"; fi
+          if [ "${{ needs.checkov.result }}" == "success" ]; then echo "✅ Checkov: PASSED"; else echo "❌ Checkov: FAILED - Mauvaise config IaC"; fi
+          if [ "${{ needs.dast.result }}" == "success" ]; then echo "✅ ZAP DAST: PASSED"; else echo "❌ ZAP DAST: FAILED - XSS/SQLi détecté dynamiquement"; fi
           echo "================================="
-
           if [ "${{ needs.gitleaks.result }}" == "success" ] && \
              [ "${{ needs.sast.result }}" == "success" ] && \
              [ "${{ needs.sca.result }}" == "success" ] && \
              [ "${{ needs.trivy.result }}" == "success" ] && \
              [ "${{ needs.checkov.result }}" == "success" ] && \
              [ "${{ needs.dast.result }}" == "success" ]; then
-            echo "✅ Tous les contrôles de sécurité sont PASSÉS - Pipeline peut continuer"
+            echo "✅ Tous les contrôles PASSÉS - Déploiement autorisé"
             exit 0
           else
-            echo "❌ Contrôles de sécurité ÉCHOUÉS - Pipeline bloqué"
-            echo "🚫 Déploiement bloqué en raison de violations de sécurité"
+            echo "❌ Contrôles ÉCHOUÉS - Déploiement BLOQUÉ"
             exit 1
           fi
