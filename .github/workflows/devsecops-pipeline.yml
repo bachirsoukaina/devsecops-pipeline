@@ -132,14 +132,34 @@ jobs:
           key: owasp-dc-nvd-${{ github.run_id }}
           restore-keys: owasp-dc-nvd-
 
-      - name: OWASP Dependency Check
+      - name: OWASP Dependency Check (avec retry sur panne NVD)
         run: |
-          mvn org.owasp:dependency-check-maven:check \
-            -DfailBuildOnCVSS=7 \
-            -Dformat=ALL \
-            -DoutputDirectory=target/owasp-reports \
-            -DnvdApiKey=${{ secrets.NVD_API_KEY }}
+          for attempt in 1 2 3; do
+            echo "🔄 Tentative $attempt/3..."
+            if mvn org.owasp:dependency-check-maven:check \
+              -DfailBuildOnCVSS=7 \
+              -Dformat=ALL \
+              -DoutputDirectory=target/owasp-reports \
+              -DnvdApiKey=${{ secrets.NVD_API_KEY }} \
+              -DnvdApiDelay=4000 \
+              -DnvdMaxRetryCount=10 \
+              -DnvdValidForHours=24; then
+              echo "✅ Dependency Check terminé"
+              exit 0
+            fi
+            echo "⚠️ Échec tentative $attempt (probable panne NVD), nouvelle tentative dans 30s..."
+            sleep 30
+          done
+          echo "❌ Échec après 3 tentatives - voir logs ci-dessus"
+          exit 1
         working-directory: backend
+        # IMPORTANT : ce retry gère uniquement les pannes/timeouts du service NVD (503/429).
+        # Si une VRAIE vulnérabilité CVSS >= 7 est trouvée, mvn échoue avec un message
+        # différent dès que dependency-check a accès aux données — le retry ne masque
+        # jamais une vraie détection, car le job continue d'échouer (exit 1) si
+        # dependency-check tourne correctement et trouve une vulnérabilité.
+        # -DnvdValidForHours=24 réutilise les données NVD du cache si elles ont
+        # moins de 24h, évitant un re-téléchargement complet à chaque run.
 
       - name: Upload OWASP Report
         if: always()
